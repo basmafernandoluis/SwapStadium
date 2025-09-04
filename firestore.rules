@@ -1,0 +1,49 @@
+// Règles Firestore pour SwapStadium
+// Version de développement - À sécuriser en production
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Règles pour les utilisateurs
+    match /users/{userId} {
+      // Lecture : tout utilisateur authentifié peut lire les profils publics
+      allow read: if request.auth != null;
+      
+      // Écriture : seul le propriétaire peut modifier son profil
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Règles pour les billets
+    match /tickets/{ticketId} {
+      // Lecture : tout utilisateur authentifié peut lire les billets
+      allow read: if request.auth != null;
+      
+      // Création : utilisateur authentifié peut créer ses billets
+      allow create: if request.auth != null && 
+                   request.auth.uid == resource.data.userId;
+      
+      // Modification/suppression : seul le propriétaire
+      allow update, delete: if request.auth != null && 
+                           request.auth.uid == resource.data.userId;
+    }
+    
+    // Règles pour les échanges
+    match /exchanges/{exchangeId} {
+      // Lecture : participants à l'échange peuvent lire
+      allow read: if request.auth != null;
+      
+      // Création : utilisateur authentifié peut créer un échange
+      allow create: if request.auth != null;
+      
+      // Modification : participants peuvent modifier
+      allow update: if request.auth != null;
+    }
+    
+    // Règles temporaires pour le développement
+    // ATTENTION : À supprimer en production !
+    match /{document=**} {
+      allow read, write: if true; // Permet tout pour le développement
+    }
+  }
+}
