@@ -4,10 +4,11 @@
   },
   "build": {
     "development": {
+      "developmentClient": true,
       "distribution": "internal",
       "android": {
         "gradleCommand": ":app:assembleDebug",
-        "buildType": "developmentClient"
+        "buildType": "apk"
       },
       "ios": {
         "buildConfiguration": "Debug",
@@ -27,7 +28,7 @@
     },
     "production": {
       "android": {
-        "buildType": "aab"
+        "buildType": "app-bundle"
       },
       "ios": {
         "buildConfiguration": "Release"
