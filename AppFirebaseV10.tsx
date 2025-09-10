@@ -1,73 +1,42 @@
 import 'react-native-gesture-handler';
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { AuthService, User } from './src/services/firebaseV10Clean';
 
-// Simulation d'un utilisateur (sans Firebase)
-interface MockUser {
-  email: string;
-  displayName: string;
-}
-
-// Mock storage simple (en mémoire)
-class MockAuth {
-  private static currentUser: MockUser | null = null;
-  
-  static async signIn(email: string, password: string): Promise<MockUser> {
-    // Simulation d'une connexion
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    if (password.length < 6) {
-      throw new Error('Le mot de passe doit contenir au moins 6 caractères');
-    }
-    
-    const user: MockUser = {
-      email,
-      displayName: email.split('@')[0]
-    };
-    
-    this.currentUser = user;
-    return user;
-  }
-  
-  static async signUp(email: string, password: string, displayName: string): Promise<MockUser> {
-    // Simulation d'une inscription
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    if (password.length < 6) {
-      throw new Error('Le mot de passe doit contenir au moins 6 caractères');
-    }
-    
-    const user: MockUser = {
-      email,
-      displayName
-    };
-    
-    this.currentUser = user;
-    return user;
-  }
-  
-  static async signOut(): Promise<void> {
-    this.currentUser = null;
-  }
-  
-  static getCurrentUser(): MockUser | null {
-    return this.currentUser;
-  }
-}
-
-// Écran d'accueil avec gestion d'authentification mock
+// Écran d'accueil avec état d'authentification Firebase v10
 function HomeScreen({ navigation }: any) {
-  const [user, setUser] = useState<MockUser | null>(MockAuth.getCurrentUser());
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Écouter les changements d'état d'authentification Firebase v10
+    const unsubscribe = AuthService.onAuthStateChanged((authUser) => {
+      setUser(authUser);
+      setLoading(false);
+    });
+
+    return unsubscribe; // Nettoyer l'écouteur au démontage
+  }, []);
 
   const handleSignOut = async () => {
-    await MockAuth.signOut();
-    setUser(null);
-    Alert.alert('Succès', 'Déconnexion réussie');
+    const result = await AuthService.signOut();
+    if (!result.success) {
+      Alert.alert('Erreur', result.error || 'Erreur lors de la déconnexion');
+    }
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color="#1e40af" />
+        <Text style={styles.loadingText}>Chargement...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -78,7 +47,9 @@ function HomeScreen({ navigation }: any) {
         <View style={styles.userSection}>
           <Text style={styles.welcomeText}>Bienvenue !</Text>
           <Text style={styles.userEmail}>{user.email}</Text>
-          <Text style={styles.userName}>{user.displayName}</Text>
+          {user.displayName && (
+            <Text style={styles.userName}>{user.displayName}</Text>
+          )}
           
           <TouchableOpacity 
             style={[styles.button, styles.signOutButton]}
@@ -89,11 +60,11 @@ function HomeScreen({ navigation }: any) {
         </View>
       ) : (
         <View style={styles.authSection}>
-          <Text style={styles.status}>✅ Mode test sans Firebase (fonctionne sans AsyncStorage)</Text>
+          <Text style={styles.status}>✅ Firebase v10 intégré (sans AsyncStorage)</Text>
           
           <TouchableOpacity 
             style={styles.button}
-            onPress={() => navigation.navigate('Login', { setUser })}
+            onPress={() => navigation.navigate('Login')}
           >
             <Text style={styles.buttonText}>Se connecter</Text>
           </TouchableOpacity>
@@ -103,15 +74,13 @@ function HomeScreen({ navigation }: any) {
   );
 }
 
-// Écran de connexion mock
-function LoginScreen({ navigation, route }: any) {
+// Écran de connexion avec Firebase v10
+function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState('test@example.com');
   const [password, setPassword] = useState('123456');
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [displayName, setDisplayName] = useState('Test User');
-  
-  const { setUser } = route.params;
 
   const handleAuth = async () => {
     if (!email || !password) {
@@ -127,21 +96,24 @@ function LoginScreen({ navigation, route }: any) {
     setLoading(true);
 
     try {
-      let user;
+      let result;
       if (isSignUp) {
-        user = await MockAuth.signUp(email, password, displayName);
+        result = await AuthService.signUp(email, password, displayName);
       } else {
-        user = await MockAuth.signIn(email, password);
+        result = await AuthService.signIn(email, password);
       }
 
-      setUser(user);
-      Alert.alert(
-        'Succès', 
-        isSignUp ? 'Compte créé avec succès !' : 'Connexion réussie !',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
-    } catch (error: any) {
-      Alert.alert('Erreur', error.message || 'Erreur d\'authentification');
+      if (result.success) {
+        Alert.alert(
+          'Succès', 
+          isSignUp ? 'Compte créé avec succès !' : 'Connexion réussie !',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        Alert.alert('Erreur', result.error || 'Erreur d\'authentification');
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Une erreur est survenue');
     } finally {
       setLoading(false);
     }
@@ -152,7 +124,7 @@ function LoginScreen({ navigation, route }: any) {
       <Text style={styles.title}>
         {isSignUp ? 'Inscription' : 'Connexion'}
       </Text>
-      <Text style={styles.subtitle}>SwapStadium (Mode Test)</Text>
+      <Text style={styles.subtitle}>SwapStadium Firebase v10</Text>
 
       <View style={styles.formContainer}>
         {isSignUp && (
@@ -189,9 +161,13 @@ function LoginScreen({ navigation, route }: any) {
           onPress={handleAuth}
           disabled={loading}
         >
-          <Text style={styles.buttonText}>
-            {loading ? 'Chargement...' : isSignUp ? 'S\'inscrire' : 'Se connecter'}
-          </Text>
+          {loading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.buttonText}>
+              {isSignUp ? 'S\'inscrire' : 'Se connecter'}
+            </Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -246,6 +222,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -263,6 +243,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 30,
     textAlign: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
   },
   userSection: {
     alignItems: 'center',

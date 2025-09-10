@@ -1,8 +1,9 @@
 import firebase from 'firebase/app';
 import 'firebase/auth';
 import 'firebase/firestore';
-import 'firebase/storage';
-import 'firebase/messaging';
+// Temporairement, on évite storage et messaging qui peuvent causer des problèmes AsyncStorage
+// import 'firebase/storage';
+// import 'firebase/messaging';
 
 // Configuration Firebase - À remplacer par vos vraies clés
 const firebaseConfig = {
@@ -22,23 +23,24 @@ if (!firebase.apps.length) {
   firebase.app(); // if already initialized, use that one
 }
 
-// Configuration de la persistance pour l'authentification
+// Désactiver la persistance Firebase pour éviter AsyncStorage
+// Cette ligne évite les erreurs AsyncStorage
 firebase.auth().setPersistence(firebase.auth.Auth.Persistence.NONE)
   .then(() => {
-    console.log('ℹ️ Firebase auth persistence set to NONE');
+    console.log('ℹ️ Firebase auth persistence disabled (no AsyncStorage)');
   })
   .catch((error: any) => {
-    console.error('Erreur de configuration de la persistance:', error);
+    console.warn('Persistance déjà configurée:', error.message);
   });
 
-// Services Firebase v8
+// Services Firebase v8 simplifiés
 export const auth = firebase.auth();
 export const db = firebase.firestore();
-export const storage = firebase.storage();
+// export const storage = firebase.storage(); // Temporairement désactivé
 
 // Timestamp utility
 export const timestamp = firebase.firestore.Timestamp;
 
-console.log('✅ Firebase v8 initialized successfully');
+console.log('✅ Firebase v8 initialized successfully (simplified)');
 
 export default firebase;

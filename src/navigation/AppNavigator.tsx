@@ -12,8 +12,8 @@ import SearchScreen from '../screens/SearchScreen';
 import AddTicketScreen from '../screens/tickets/AddTicketScreen';
 import MyTicketsScreen from '../screens/tickets/MyTicketsScreen';
 import TicketDetailsScreen from '../screens/tickets/TicketDetailsScreen';
-import ExchangeScreen from '../screens/exchange/ExchangeScreen';
-import ExchangeDetailsScreen from '../screens/exchange/ExchangeDetailsScreen';
+// import ExchangeScreen from '../screens/exchange/ExchangeScreen';
+// import ExchangeDetailsScreen from '../screens/exchange/ExchangeDetailsScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
@@ -114,11 +114,11 @@ const TabNavigator = () => {
         component={MyTicketsScreen}
         options={{ title: t('tickets.title') }}
       />
-      <Tab.Screen 
+      {/* <Tab.Screen 
         name="Exchange" 
         component={ExchangeScreen}
         options={{ title: t('exchange.myExchanges') }}
-      />
+      /> */}
       <Tab.Screen 
         name="Profile" 
         component={ProfileScreen}
@@ -153,11 +153,11 @@ const MainStack = () => {
         component={TicketDetailsScreen}
         options={{ title: t('tickets.ticketDetails') }}
       />
-      <Stack.Screen 
+      {/* <Stack.Screen 
         name="ExchangeDetails" 
         component={ExchangeDetailsScreen}
         options={{ title: t('exchange.exchangeRequest') }}
-      />
+      /> */}
       <Stack.Screen 
         name="EditProfile" 
         component={EditProfileScreen}

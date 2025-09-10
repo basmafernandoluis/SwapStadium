@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, limit, query } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { AuthService } from '../services/authService';
 
@@ -44,10 +43,9 @@ export const useFirebaseStatus = () => {
 
         // Tester Firestore
         try {
-          // Test simple de lecture (sans authentification requise)
-          const testCollection = collection(db, 'test');
-          const testQuery = query(testCollection, limit(1));
-          await getDocs(testQuery);
+          // Test simple de lecture Firebase v8
+          const testCollection = db.collection('test');
+          await testCollection.limit(1).get();
           firestoreStatus = true;
         } catch (error: any) {
           if (error.code === 'permission-denied') {

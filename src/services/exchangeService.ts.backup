@@ -1,0 +1,240 @@
+import { db } from './firebase';
+import { Exchange, ExchangeMessage } from '../types';
+
+export class ExchangeService {
+  private static readonly COLLECTION_NAME = 'exchanges';
+  
+  static async createExchangeRequest(
+    initiatorId: string,
+    targetId: string,
+    initiatorTicketId: string,
+    targetTicketId: string,
+    initialMessage: string
+  ): Promise<string> {
+    try {
+      const exchangeData: Omit<Exchange, 'id'> = {
+        initiatorId,
+        targetId,
+        initiatorTicketId,
+        targetTicketId,
+        status: 'pending',
+        messages: [{
+          id: Date.now().toString(),
+          senderId: initiatorId,
+          message: initialMessage,
+          timestamp: new Date(),
+          type: 'text'
+        }],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      const docRef = await addDoc(collection(db, this.COLLECTION_NAME), exchangeData);
+      
+      // Envoyer une notification au propriétaire du billet cible
+      await this.sendSystemMessage(docRef.id, 'Nouvelle demande d\'échange reçue');
+      
+      return docRef.id;
+    } catch (error) {
+      console.error('Erreur lors de la création de la demande d\'échange:', error);
+      throw error;
+    }
+  }
+  
+  static async respondToExchange(
+    exchangeId: string,
+    response: 'accepted' | 'rejected',
+    message?: string
+  ): Promise<void> {
+    try {
+      const exchangeRef = doc(db, this.COLLECTION_NAME, exchangeId);
+      const exchangeDoc = await getDoc(exchangeRef);
+      
+      if (!exchangeDoc.exists()) {
+        throw new Error('Échange non trouvé');
+      }
+      
+      const exchange = exchangeDoc.data() as Exchange;
+      
+      const updates: any = {
+        status: response,
+        updatedAt: new Date()
+      };
+      
+      if (message) {
+        const newMessage: ExchangeMessage = {
+          id: Date.now().toString(),
+          senderId: exchange.targetId,
+          message,
+          timestamp: new Date(),
+          type: 'text'
+        };
+        updates.messages = arrayUnion(newMessage);
+      }
+      
+      // Message système
+      const systemMessage: ExchangeMessage = {
+        id: (Date.now() + 1).toString(),
+        senderId: 'system',
+        message: response === 'accepted' ? 
+          'Demande d\'échange acceptée ! Contactez-vous pour finaliser l\'échange.' :
+          'Demande d\'échange refusée.',
+        timestamp: new Date(),
+        type: 'system'
+      };
+      updates.messages = arrayUnion(systemMessage);
+      
+      await updateDoc(exchangeRef, updates);
+    } catch (error) {
+      console.error('Erreur lors de la réponse à l\'échange:', error);
+      throw error;
+    }
+  }
+  
+  static async completeExchange(exchangeId: string): Promise<void> {
+    try {
+      const exchangeRef = doc(db, this.COLLECTION_NAME, exchangeId);
+      const exchangeDoc = await getDoc(exchangeRef);
+      
+      if (!exchangeDoc.exists()) {
+        throw new Error('Échange non trouvé');
+      }
+      
+      const exchange = exchangeDoc.data() as Exchange;
+      
+      if (exchange.status !== 'accepted') {
+        throw new Error('L\'échange doit être accepté avant d\'être finalisé');
+      }
+      
+      const systemMessage: ExchangeMessage = {
+        id: Date.now().toString(),
+        senderId: 'system',
+        message: 'Échange finalisé avec succès ! N\'oubliez pas de noter votre expérience.',
+        timestamp: new Date(),
+        type: 'system'
+      };
+      
+      await updateDoc(exchangeRef, {
+        status: 'completed',
+        completedAt: new Date(),
+        updatedAt: new Date(),
+        messages: arrayUnion(systemMessage)
+      });
+      
+      // Marquer les billets comme échangés
+      await this.markTicketsAsExchanged(exchange.initiatorTicketId, exchange.targetTicketId);
+      
+    } catch (error) {
+      console.error('Erreur lors de la finalisation de l\'échange:', error);
+      throw error;
+    }
+  }
+  
+  static async addMessage(exchangeId: string, senderId: string, message: string): Promise<void> {
+    try {
+      const newMessage: ExchangeMessage = {
+        id: Date.now().toString(),
+        senderId,
+        message,
+        timestamp: new Date(),
+        type: 'text'
+      };
+      
+      await updateDoc(doc(db, this.COLLECTION_NAME, exchangeId), {
+        messages: arrayUnion(newMessage),
+        updatedAt: new Date()
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout du message:', error);
+      throw error;
+    }
+  }
+  
+  static async getUserExchanges(userId: string): Promise<Exchange[]> {
+    try {
+      const q = query(
+        collection(db, this.COLLECTION_NAME),
+        or(
+          where('initiatorId', '==', userId),
+          where('targetId', '==', userId)
+        ),
+        orderBy('updatedAt', 'desc'),
+        limit(50) // Limiter pour optimiser les coûts
+      );
+      
+      const snapshot = await getDocs(q);
+      const exchanges: Exchange[] = [];
+      
+      snapshot.forEach(doc => {
+        exchanges.push({ id: doc.id, ...doc.data() } as Exchange);
+      });
+      
+      return exchanges;
+    } catch (error) {
+      console.error('Erreur lors de la récupération des échanges:', error);
+      throw error;
+    }
+  }
+  
+  static async getExchangeById(exchangeId: string): Promise<Exchange | null> {
+    try {
+      const docSnap = await getDoc(doc(db, this.COLLECTION_NAME, exchangeId));
+      if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() } as Exchange;
+      }
+      return null;
+    } catch (error) {
+      console.error('Erreur lors de la récupération de l\'échange:', error);
+      throw error;
+    }
+  }
+  
+  static async cancelExchange(exchangeId: string): Promise<void> {
+    try {
+      const systemMessage: ExchangeMessage = {
+        id: Date.now().toString(),
+        senderId: 'system',
+        message: 'Échange annulé.',
+        timestamp: new Date(),
+        type: 'system'
+      };
+      
+      await updateDoc(doc(db, this.COLLECTION_NAME, exchangeId), {
+        status: 'cancelled',
+        updatedAt: new Date(),
+        messages: arrayUnion(systemMessage)
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'annulation de l\'échange:', error);
+      throw error;
+    }
+  }
+  
+  private static async sendSystemMessage(exchangeId: string, message: string): Promise<void> {
+    const systemMessage: ExchangeMessage = {
+      id: Date.now().toString(),
+      senderId: 'system',
+      message,
+      timestamp: new Date(),
+      type: 'system'
+    };
+    
+    await updateDoc(doc(db, this.COLLECTION_NAME, exchangeId), {
+      messages: arrayUnion(systemMessage)
+    });
+  }
+  
+  private static async markTicketsAsExchanged(ticketId1: string, ticketId2: string): Promise<void> {
+    try {
+      // Importer le service des billets pour marquer comme échangés
+      const { TicketService } = await import('./ticketService');
+      
+      await Promise.all([
+        TicketService.updateTicket(ticketId1, { status: 'exchanged' }),
+        TicketService.updateTicket(ticketId2, { status: 'exchanged' })
+      ]);
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du statut des billets:', error);
+    }
+  }
+}
