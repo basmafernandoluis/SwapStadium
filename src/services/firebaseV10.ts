@@ -1,7 +1,7 @@
 // Firebase v10 moderne - sans AsyncStorage
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, initializeAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 // Configuration Firebase
 const firebaseConfig = {
@@ -14,75 +14,12 @@ const firebaseConfig = {
   measurementId: "G-HHHZFVYE0Z"
 };
 
-// Initialisation Firebase v10 avec vérification
-let app: FirebaseApp;
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-  console.log('✅ Firebase v10 app initialized');
-} else {
-  app = getApp();
-  console.log('✅ Firebase v10 app already exists');
-}
+// Initialisation Firebase v10
+const app = initializeApp(firebaseConfig);
 
-// Firebase v10 moderne - sans AsyncStorage
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, initializeAuth, Auth, getReactNativePersistence } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
-
-// Configuration Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyDrHav53bbyqKGbv7T0heYK94DqyIoRCuM",
-  authDomain: "swapstadium.firebaseapp.com",
-  projectId: "swapstadium",
-  storageBucket: "swapstadium.firebasestorage.app",
-  messagingSenderId: "153220517197",
-  appId: "1:153220517197:web:358133a81078adc2a87b04",
-  measurementId: "G-HHHZFVYE0Z"
-};
-
-// Initialisation Firebase v10 avec vérification
-let app: FirebaseApp;
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-  console.log('✅ Firebase v10 app initialized');
-} else {
-  app = getApp();
-  console.log('✅ Firebase v10 app already exists');
-}
-
-// Services Firebase v10 avec initialisation spécifique React Native
-let auth: Auth;
-let db: Firestore;
-
-try {
-  // Initialiser Auth spécifiquement pour React Native avec persistence
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-  });
-  db = getFirestore(app);
-  console.log('✅ Firebase v10 Auth initialized with React Native persistence');
-} catch (error: any) {
-  // Si l'auth est déjà initialisée, utiliser getAuth
-  if (error.code === 'auth/already-initialized') {
-    auth = getAuth(app);
-    db = getFirestore(app);
-    console.log('✅ Firebase v10 Auth already initialized, using getAuth');
-  } else {
-    console.error('❌ Error initializing Firebase Auth:', error);
-    // Fallback vers getAuth basique
-    try {
-      auth = getAuth(app);
-      db = getFirestore(app);
-      console.log('✅ Firebase v10 services initialized with getAuth fallback');
-    } catch (fallbackError) {
-      console.error('❌ Failed to initialize Firebase services completely:', fallbackError);
-      throw fallbackError;
-    }
-  }
-}
-
-export { auth, db };
+// Services Firebase v10
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
 // Types
 export interface User {

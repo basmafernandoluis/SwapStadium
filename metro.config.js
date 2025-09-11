@@ -1,16 +1,19 @@
 const { getDefaultConfig } = require('expo/metro-config');
+const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
-// Configuration complète pour AsyncStorage
+// Aliases pour éviter l'accès à ReactNative.AsyncStorage dans les builds RN de Firebase
 config.resolver.alias = {
-  '@react-native-community/async-storage': '@react-native-async-storage/async-storage',
-  // Redirection directe pour les imports depuis react-native
-  'react-native/AsyncStorage': '@react-native-async-storage/async-storage',
-  'react-native/Libraries/Storage/AsyncStorage': '@react-native-async-storage/async-storage',
+  // Toujours pointer l'ancien package vers le nouveau
+  '@react-native-community/async-storage': require.resolve('@react-native-async-storage/async-storage'),
+  // Forcer @firebase/app à utiliser l'ESM web (évite index.rn.cjs qui lit AsyncStorage)
+  '@firebase/app': require.resolve('@firebase/app/dist/index.esm.js'),
+  // Alias direct pour firebase/app côté web ESM
+  'firebase/app': require.resolve('firebase/app/dist/index.esm.js'), // This line is retained
 };
 
-// Polyfill pour AsyncStorage dans le module react-native
-config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
+// Polyfill pour AsyncStorage dans react-native
+config.resolver.platforms = ['ios', 'android', 'native', 'web'];
 
 module.exports = config;

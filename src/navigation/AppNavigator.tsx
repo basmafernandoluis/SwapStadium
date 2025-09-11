@@ -9,6 +9,8 @@ import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
+import TicketAddScreen from '../screens/TicketAddScreen';
+import TicketListScreen from '../screens/TicketListScreen';
 import AddTicketScreen from '../screens/tickets/AddTicketScreen';
 import MyTicketsScreen from '../screens/tickets/MyTicketsScreen';
 import TicketDetailsScreen from '../screens/tickets/TicketDetailsScreen';
@@ -22,6 +24,7 @@ import FirebaseTestScreen from '../screens/FirebaseTestScreen';
 import SignupTestScreen from '../screens/SignupTestScreen';
 import AddTicketTestScreen from '../screens/AddTicketTestScreen';
 import NavigationTestScreen from '../screens/NavigationTestScreen';
+import TicketTestScreen from '../screens/TicketTestScreen';
 import AppStatusScreen from '../screens/AppStatusScreen';
 
 import { useAuth } from '../hooks/useAuth';
@@ -39,6 +42,9 @@ export type RootStackParamList = {
   Home: undefined;
   Search: undefined;
   AddTicket: undefined;
+  TicketAdd: undefined;
+  TicketList: undefined;
+  TicketTest: undefined;
   MyTickets: undefined;
   TicketDetails: { ticketId: string };
   Exchange: undefined;
@@ -82,7 +88,7 @@ const TabNavigator = () => {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Search') {
             iconName = focused ? 'search' : 'search-outline';
-          } else if (route.name === 'MyTickets') {
+          } else if (route.name === 'TicketList') {
             iconName = focused ? 'ticket' : 'ticket-outline';
           } else if (route.name === 'Exchange') {
             iconName = focused ? 'swap-horizontal' : 'swap-horizontal-outline';
@@ -110,8 +116,8 @@ const TabNavigator = () => {
         options={{ title: t('search.searchTickets') }}
       />
       <Tab.Screen 
-        name="MyTickets" 
-        component={MyTicketsScreen}
+        name="TicketList" 
+        component={TicketListScreen}
         options={{ title: t('tickets.title') }}
       />
       {/* <Tab.Screen 
@@ -125,9 +131,9 @@ const TabNavigator = () => {
         options={{ title: t('profile.myProfile') }}
       />
       <Tab.Screen 
-        name="AppStatus" 
-        component={AppStatusScreen}
-        options={{ title: '📊 Stats' }}
+        name="TicketTest" 
+        component={TicketTestScreen}
+        options={{ title: '🧪 Test' }}
       />
     </Tab.Navigator>
   );
@@ -142,6 +148,11 @@ const MainStack = () => {
         name="Main" 
         component={TabNavigator} 
         options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="TicketAdd" 
+        component={TicketAddScreen}
+        options={{ title: 'Créer un ticket' }}
       />
       <Stack.Screen 
         name="AddTicket" 

@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { AuthService, User } from './src/services/firebaseV10Clean';
+import { AuthService, User } from './src/services/firebaseV10';
 
 // Écran d'accueil avec état d'authentification Firebase v10
 function HomeScreen({ navigation }: any) {

@@ -6,6 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { AuthService, User } from './src/services/authService';
+import TicketListScreen from './src/screens/tickets/TicketListScreen';
+import TicketAddScreen from './src/screens/tickets/TicketAddScreen';
 
 // Écran d'accueil avec état d'authentification
 function HomeScreen({ navigation }: any) {
@@ -51,12 +53,28 @@ function HomeScreen({ navigation }: any) {
             <Text style={styles.userName}>{user.displayName}</Text>
           )}
           
-          <TouchableOpacity 
-            style={[styles.button, styles.signOutButton]}
-            onPress={handleSignOut}
-          >
-            <Text style={styles.buttonText}>Se déconnecter</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity 
+              style={[styles.button, styles.primaryButton]}
+              onPress={() => navigation.navigate('TicketList')}
+            >
+              <Text style={styles.buttonText}>Mes Tickets</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.button, styles.secondaryButton]}
+              onPress={() => navigation.navigate('TicketAdd')}
+            >
+              <Text style={[styles.buttonText, styles.secondaryButtonText]}>Créer un Ticket</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.button, styles.signOutButton]}
+              onPress={handleSignOut}
+            >
+              <Text style={styles.buttonText}>Se déconnecter</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : (
         <View style={styles.authSection}>
@@ -207,6 +225,16 @@ export default function App() {
             component={LoginScreen} 
             options={{ title: 'Connexion' }}
           />
+          <Stack.Screen 
+            name="TicketList" 
+            component={TicketListScreen} 
+            options={{ title: 'Mes Tickets' }}
+          />
+          <Stack.Screen 
+            name="TicketAdd" 
+            component={TicketAddScreen} 
+            options={{ title: 'Nouveau Ticket', headerShown: false }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
       <StatusBar style="auto" />
@@ -273,6 +301,11 @@ const styles = StyleSheet.create({
     color: '#1e40af',
     marginBottom: 20,
   },
+  buttonContainer: {
+    width: '100%',
+    maxWidth: 300,
+    alignItems: 'center',
+  },
   formContainer: {
     width: '100%',
     maxWidth: 300,
@@ -298,16 +331,28 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
+  primaryButton: {
+    backgroundColor: '#007AFF',
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#007AFF',
+  },
   buttonDisabled: {
     backgroundColor: '#94a3b8',
   },
   signOutButton: {
     backgroundColor: '#dc2626',
+    marginTop: 20,
   },
   buttonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  secondaryButtonText: {
+    color: '#007AFF',
   },
   switchButton: {
     marginTop: 20,

@@ -1,5 +1,5 @@
 import firebase from 'firebase/app';
-import { auth, db } from './firebase';
+import { auth } from './firebase';
 
 export interface User {
   uid: string;

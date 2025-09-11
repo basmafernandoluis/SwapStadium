@@ -1,5 +1,16 @@
-import firebase from 'firebase/app';
-import { firestore } from './firebase';
+// Firebase v10 - API modulaire
+import { 
+  collection, 
+  addDoc, 
+  getDocs, 
+  deleteDoc, 
+  doc, 
+  query, 
+  where, 
+  orderBy,
+  Timestamp
+} from 'firebase/firestore';
+import { db, timestamp } from './firebase';
 import { AuthService } from './authService';
 
 // Types basés sur la structure Firebase fournie
@@ -85,16 +96,16 @@ export class TicketService {
       // Conversion des dates en Timestamp Firebase
       const ticketForFirebase = {
         ...ticket,
-        createdAt: firebase.firestore.Timestamp.fromDate(ticket.createdAt),
-        updatedAt: firebase.firestore.Timestamp.fromDate(ticket.updatedAt),
-        expiresAt: firebase.firestore.Timestamp.fromDate(ticket.expiresAt),
+        createdAt: timestamp.fromDate(ticket.createdAt),
+        updatedAt: timestamp.fromDate(ticket.updatedAt),
+        expiresAt: timestamp.fromDate(ticket.expiresAt),
         match: {
           ...ticket.match,
-          date: firebase.firestore.Timestamp.fromDate(ticket.match.date),
+          date: timestamp.fromDate(ticket.match.date),
         },
       };
 
-      const docRef = await firestore.collection(this.COLLECTION_NAME).add(ticketForFirebase);
+      const docRef = await db.collection(this.COLLECTION_NAME).add(ticketForFirebase);
       
       console.log('✅ TicketService - Ticket créé:', docRef.id);
 
@@ -105,7 +116,7 @@ export class TicketService {
 
       return { success: true, ticket: createdTicket };
     } catch (error: any) {
-      console.error('❌ TicketService - Erreur création ticket:', error);
+      console.error('❌ TicketService - Erreur création:', error);
       return { 
         success: false, 
         error: 'Erreur lors de la création du ticket' 
@@ -122,16 +133,16 @@ export class TicketService {
 
       console.log('🎫 TicketService - Récupération tickets utilisateur');
 
-      const snapshot = await firestore.collection(this.COLLECTION_NAME)
+      const snapshot = await db
+        .collection(this.COLLECTION_NAME)
         .where('userId', '==', currentUser.uid)
         .orderBy('createdAt', 'desc')
         .get();
 
-      const tickets: Ticket[] = snapshot.docs.map((docSnapshot: firebase.firestore.DocumentSnapshot) => {
-        const data = docSnapshot.data();
-        if (!data) return null;
+      const tickets: Ticket[] = snapshot.docs.map(doc => {
+        const data = doc.data();
         return {
-          id: docSnapshot.id,
+          id: doc.id,
           ...data,
           createdAt: data.createdAt.toDate(),
           updatedAt: data.updatedAt.toDate(),
@@ -141,7 +152,7 @@ export class TicketService {
             date: data.match.date.toDate(),
           },
         } as Ticket;
-      }).filter(Boolean) as Ticket[];
+      });
 
       console.log('✅ TicketService - Tickets récupérés:', tickets.length);
       return { success: true, tickets };
@@ -158,16 +169,18 @@ export class TicketService {
     try {
       console.log('🎫 TicketService - Récupération tous les tickets actifs');
 
-      const snapshot = await firestore.collection(this.COLLECTION_NAME)
+      const snapshot = await db
+        .collection(this.COLLECTION_NAME)
         .where('status', '==', 'active')
+        .where('moderationStatus', '==', 'approved')
         .orderBy('createdAt', 'desc')
+        .limit(50) // Limite pour les performances
         .get();
 
-      const tickets: Ticket[] = snapshot.docs.map((docSnapshot: firebase.firestore.DocumentSnapshot) => {
-        const data = docSnapshot.data();
-        if (!data) return null;
+      const tickets: Ticket[] = snapshot.docs.map(doc => {
+        const data = doc.data();
         return {
-          id: docSnapshot.id,
+          id: doc.id,
           ...data,
           createdAt: data.createdAt.toDate(),
           updatedAt: data.updatedAt.toDate(),
@@ -177,7 +190,7 @@ export class TicketService {
             date: data.match.date.toDate(),
           },
         } as Ticket;
-      }).filter(Boolean) as Ticket[];
+      });
 
       console.log('✅ TicketService - Tickets actifs récupérés:', tickets.length);
       return { success: true, tickets };
@@ -185,28 +198,24 @@ export class TicketService {
       console.error('❌ TicketService - Erreur récupération tickets actifs:', error);
       return { 
         success: false, 
-        error: 'Erreur lors de la récupération des tickets actifs' 
+        error: 'Erreur lors de la récupération des tickets' 
       };
     }
   }
 
-  static async getTicket(ticketId: string): Promise<TicketResult> {
+  static async getTicketById(ticketId: string): Promise<TicketResult> {
     try {
       console.log('🎫 TicketService - Récupération ticket:', ticketId);
 
-      const docSnapshot = await firestore.collection(this.COLLECTION_NAME).doc(ticketId).get();
-
-      if (!docSnapshot.exists) {
-        return { success: false, error: 'Ticket introuvable' };
+      const doc = await db.collection(this.COLLECTION_NAME).doc(ticketId).get();
+      
+      if (!doc.exists) {
+        return { success: false, error: 'Ticket non trouvé' };
       }
 
-      const data = docSnapshot.data();
-      if (!data) {
-        return { success: false, error: 'Données du ticket introuvables' };
-      }
-
+      const data = doc.data()!;
       const ticket: Ticket = {
-        id: docSnapshot.id,
+        id: doc.id,
         ...data,
         createdAt: data.createdAt.toDate(),
         updatedAt: data.updatedAt.toDate(),
@@ -217,7 +226,7 @@ export class TicketService {
         },
       } as Ticket;
 
-      console.log('✅ TicketService - Ticket récupéré');
+      console.log('✅ TicketService - Ticket récupéré:', ticket.title);
       return { success: true, ticket };
     } catch (error: any) {
       console.error('❌ TicketService - Erreur récupération ticket:', error);
@@ -235,11 +244,11 @@ export class TicketService {
         return { success: false, error: 'Utilisateur non connecté' };
       }
 
-      console.log('🎫 TicketService - Mise à jour statut:', ticketId, status);
+      console.log('🎫 TicketService - Mise à jour statut:', { ticketId, status });
 
-      await firestore.collection(this.COLLECTION_NAME).doc(ticketId).update({
-        status: status,
-        updatedAt: firebase.firestore.Timestamp.fromDate(new Date()),
+      await db.collection(this.COLLECTION_NAME).doc(ticketId).update({
+        status,
+        updatedAt: timestamp.now(),
       });
 
       console.log('✅ TicketService - Statut mis à jour');
@@ -262,8 +271,18 @@ export class TicketService {
 
       console.log('🎫 TicketService - Suppression ticket:', ticketId);
 
-      await firestore.collection(this.COLLECTION_NAME).doc(ticketId).delete();
+      // Vérifier que l'utilisateur est propriétaire du ticket
+      const ticketResult = await this.getTicketById(ticketId);
+      if (!ticketResult.success || !ticketResult.ticket) {
+        return { success: false, error: 'Ticket non trouvé' };
+      }
 
+      if (ticketResult.ticket.userId !== currentUser.uid) {
+        return { success: false, error: 'Vous ne pouvez supprimer que vos propres tickets' };
+      }
+
+      await db.collection(this.COLLECTION_NAME).doc(ticketId).delete();
+      
       console.log('✅ TicketService - Ticket supprimé');
       return { success: true };
     } catch (error: any) {
@@ -276,47 +295,23 @@ export class TicketService {
   }
 
   // Méthodes utilitaires
-  static validateTicketData(data: CreateTicketData): { isValid: boolean; errors: string[] } {
-    const errors: string[] = [];
-
-    if (!data.title?.trim()) {
-      errors.push('Le titre est requis');
-    }
-
-    if (!data.description?.trim()) {
-      errors.push('La description est requise');
-    }
-
-    if (!data.category?.trim()) {
-      errors.push('La catégorie est requise');
-    }
-
-    if (!data.expiresAt || data.expiresAt <= new Date()) {
-      errors.push('La date d\'expiration doit être dans le futur');
-    }
-
-    if (!data.match?.date || data.match.date <= new Date()) {
-      errors.push('La date du match doit être dans le futur');
-    }
-
-    if (!data.currentSeat?.number || !data.currentSeat?.row || !data.currentSeat?.section) {
-      errors.push('Les informations du siège actuel sont incomplètes');
-    }
-
-    if (!data.desiredSeat?.number || !data.desiredSeat?.row || !data.desiredSeat?.section) {
-      errors.push('Les informations du siège désiré sont incomplètes');
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors
-    };
+  static validateSeat(seat: Seat): boolean {
+    return !!(seat.number && seat.row && seat.section);
   }
 
-  static formatTicketPrice(price: number): string {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(price);
+  static validateMatch(match: Match): boolean {
+    return !!(match.awayTeam && match.homeTeam && match.competition && match.stadium && match.date);
+  }
+
+  static isTicketExpired(ticket: Ticket): boolean {
+    return new Date() > ticket.expiresAt;
+  }
+
+  static formatSeat(seat: Seat): string {
+    return `Section ${seat.section}, Rangée ${seat.row}, Place ${seat.number}`;
+  }
+
+  static formatMatch(match: Match): string {
+    return `${match.homeTeam} vs ${match.awayTeam} - ${match.competition}`;
   }
 }
