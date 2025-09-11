@@ -103,7 +103,7 @@ const TicketListScreen: React.FC<TicketListScreenProps> = ({ navigation }) => {
   const renderTicketItem = ({ item }: { item: Ticket }) => (
     <TouchableOpacity 
       style={styles.ticketCard}
-      onPress={() => navigation.navigate('TicketDetail', { ticketId: item.id })}
+  onPress={() => navigation.navigate('TicketDetails', { ticketId: item.id })}
     >
       <View style={styles.ticketHeader}>
         <Text style={styles.ticketTitle} numberOfLines={1}>

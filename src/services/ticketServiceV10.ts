@@ -1,5 +1,18 @@
-import firebase from 'firebase/app';
-import { firestore } from './firebase';
+// Firebase v10 - API modulaire
+import { 
+  collection, 
+  addDoc, 
+  getDocs, 
+  deleteDoc, 
+  doc, 
+  getDoc,
+  updateDoc,
+  query, 
+  where, 
+  orderBy,
+  Timestamp
+} from 'firebase/firestore';
+import { db } from './firebase';
 import { AuthService } from './authService';
 
 // Types basés sur la structure Firebase fournie
@@ -85,16 +98,16 @@ export class TicketService {
       // Conversion des dates en Timestamp Firebase
       const ticketForFirebase = {
         ...ticket,
-        createdAt: firebase.firestore.Timestamp.fromDate(ticket.createdAt),
-        updatedAt: firebase.firestore.Timestamp.fromDate(ticket.updatedAt),
-        expiresAt: firebase.firestore.Timestamp.fromDate(ticket.expiresAt),
+        createdAt: Timestamp.fromDate(ticket.createdAt),
+        updatedAt: Timestamp.fromDate(ticket.updatedAt),
+        expiresAt: Timestamp.fromDate(ticket.expiresAt),
         match: {
           ...ticket.match,
-          date: firebase.firestore.Timestamp.fromDate(ticket.match.date),
+          date: Timestamp.fromDate(ticket.match.date),
         },
       };
 
-      const docRef = await firestore.collection(this.COLLECTION_NAME).add(ticketForFirebase);
+      const docRef = await addDoc(collection(db, this.COLLECTION_NAME), ticketForFirebase);
       
       console.log('✅ TicketService - Ticket créé:', docRef.id);
 
@@ -122,34 +135,16 @@ export class TicketService {
 
       console.log('🎫 TicketService - Récupération tickets utilisateur');
 
-      let snapshot: firebase.firestore.QuerySnapshot;
-      try {
-        snapshot = await firestore.collection(this.COLLECTION_NAME)
-          .where('userId', '==', currentUser.uid)
-          .orderBy('createdAt', 'desc')
-          .get();
-      } catch (err: any) {
-        if (err?.message?.includes('index') || err?.code === 'failed-precondition') {
-          console.warn('⚠️ TicketService - Index manquant pour (userId, createdAt desc). Fallback tri local.');
-          // Fallback sans orderBy puis tri local
-          snapshot = await firestore.collection(this.COLLECTION_NAME)
-            .where('userId', '==', currentUser.uid)
-            .get();
-          const docsSorted = snapshot.docs.sort((a, b) => {
-            const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
-            const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
-            return cb - ca; // desc
-          });
-          // Remplacer docs par version triée (créer objet compatible)
-          (snapshot as any).docs = docsSorted;
-        } else {
-          throw err;
-        }
-      }
+      const q = query(
+        collection(db, this.COLLECTION_NAME),
+        where('userId', '==', currentUser.uid),
+        orderBy('createdAt', 'desc')
+      );
 
-      const tickets: Ticket[] = snapshot.docs.map((docSnapshot: firebase.firestore.DocumentSnapshot) => {
+      const snapshot = await getDocs(q);
+
+      const tickets: Ticket[] = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
-        if (!data) return null;
         return {
           id: docSnapshot.id,
           ...data,
@@ -161,7 +156,7 @@ export class TicketService {
             date: data.match.date.toDate(),
           },
         } as Ticket;
-      }).filter(Boolean) as Ticket[];
+      });
 
       console.log('✅ TicketService - Tickets récupérés:', tickets.length);
       return { success: true, tickets };
@@ -178,32 +173,16 @@ export class TicketService {
     try {
       console.log('🎫 TicketService - Récupération tous les tickets actifs');
 
-      let snapshot: firebase.firestore.QuerySnapshot;
-      try {
-        snapshot = await firestore.collection(this.COLLECTION_NAME)
-          .where('status', '==', 'active')
-          .orderBy('createdAt', 'desc')
-          .get();
-      } catch (err: any) {
-        if (err?.message?.includes('index') || err?.code === 'failed-precondition') {
-          console.warn('⚠️ TicketService - Index manquant pour (status, createdAt desc). Fallback tri local.');
-          snapshot = await firestore.collection(this.COLLECTION_NAME)
-            .where('status', '==', 'active')
-            .get();
-            const docsSorted = snapshot.docs.sort((a, b) => {
-              const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
-              const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
-              return cb - ca; // desc
-            });
-            (snapshot as any).docs = docsSorted;
-        } else {
-          throw err;
-        }
-      }
+      const q = query(
+        collection(db, this.COLLECTION_NAME),
+        where('status', '==', 'active'),
+        orderBy('createdAt', 'desc')
+      );
 
-      const tickets: Ticket[] = snapshot.docs.map((docSnapshot: firebase.firestore.DocumentSnapshot) => {
+      const snapshot = await getDocs(q);
+
+      const tickets: Ticket[] = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
-        if (!data) return null;
         return {
           id: docSnapshot.id,
           ...data,
@@ -215,7 +194,7 @@ export class TicketService {
             date: data.match.date.toDate(),
           },
         } as Ticket;
-      }).filter(Boolean) as Ticket[];
+      });
 
       console.log('✅ TicketService - Tickets actifs récupérés:', tickets.length);
       return { success: true, tickets };
@@ -232,17 +211,14 @@ export class TicketService {
     try {
       console.log('🎫 TicketService - Récupération ticket:', ticketId);
 
-      const docSnapshot = await firestore.collection(this.COLLECTION_NAME).doc(ticketId).get();
+      const docRef = doc(db, this.COLLECTION_NAME, ticketId);
+      const docSnapshot = await getDoc(docRef);
 
-      if (!docSnapshot.exists) {
+      if (!docSnapshot.exists()) {
         return { success: false, error: 'Ticket introuvable' };
       }
 
       const data = docSnapshot.data();
-      if (!data) {
-        return { success: false, error: 'Données du ticket introuvables' };
-      }
-
       const ticket: Ticket = {
         id: docSnapshot.id,
         ...data,
@@ -266,14 +242,6 @@ export class TicketService {
     }
   }
 
-  // Alias pour compatibilité avec l'écran de détails (TicketDetailsScreen)
-  // Retourne directement l'objet Ticket ou null en cas d'erreur / absence
-  static async getTicketById(ticketId: string): Promise<Ticket | null> {
-    const result = await this.getTicket(ticketId);
-    if (result.success && result.ticket) return result.ticket;
-    return null;
-  }
-
   static async updateTicketStatus(ticketId: string, status: Ticket['status']): Promise<TicketResult> {
     try {
       const currentUser = AuthService.getCurrentUser();
@@ -283,9 +251,11 @@ export class TicketService {
 
       console.log('🎫 TicketService - Mise à jour statut:', ticketId, status);
 
-      await firestore.collection(this.COLLECTION_NAME).doc(ticketId).update({
+      const docRef = doc(db, this.COLLECTION_NAME, ticketId);
+      
+      await updateDoc(docRef, {
         status: status,
-        updatedAt: firebase.firestore.Timestamp.fromDate(new Date()),
+        updatedAt: Timestamp.fromDate(new Date()),
       });
 
       console.log('✅ TicketService - Statut mis à jour');
@@ -308,7 +278,8 @@ export class TicketService {
 
       console.log('🎫 TicketService - Suppression ticket:', ticketId);
 
-      await firestore.collection(this.COLLECTION_NAME).doc(ticketId).delete();
+      const docRef = doc(db, this.COLLECTION_NAME, ticketId);
+      await deleteDoc(docRef);
 
       console.log('✅ TicketService - Ticket supprimé');
       return { success: true };
@@ -364,20 +335,5 @@ export class TicketService {
       style: 'currency',
       currency: 'EUR'
     }).format(price);
-  }
-
-  // --- Utilitaires ajoutés (utilisés par les écrans) ---
-  static formatSeat(seat: Seat): string {
-    if (!seat) return '';
-    return `Section ${seat.section}, Rangée ${seat.row}, Place ${seat.number}`;
-  }
-
-  static formatMatch(match: Match): string {
-    if (!match) return '';
-    return `${match.homeTeam} vs ${match.awayTeam} - ${match.competition}`;
-  }
-
-  static isTicketExpired(ticket: Ticket): boolean {
-    return new Date() > ticket.expiresAt;
   }
 }

@@ -4,10 +4,14 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityInd
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
+import { AuthProvider } from './src/hooks/useAuth';
+import { ToastProvider } from './src/contexts/ToastContext';
+import { ErrorProvider } from './src/contexts/ErrorContext';
 import { createStackNavigator } from '@react-navigation/stack';
 import { AuthService, User } from './src/services/authService';
 import TicketListScreen from './src/screens/tickets/TicketListScreen';
 import TicketAddScreen from './src/screens/tickets/TicketAddScreen';
+import TicketDetailsScreen from './src/screens/tickets/TicketDetailsScreen';
 
 // Écran d'accueil avec état d'authentification
 function HomeScreen({ navigation }: any) {
@@ -213,7 +217,10 @@ const Stack = createStackNavigator();
 export default function App() {
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <ErrorProvider>
+      <AuthProvider>
+        <ToastProvider>
+        <NavigationContainer>
         <Stack.Navigator initialRouteName="Home">
           <Stack.Screen 
             name="Home" 
@@ -235,8 +242,16 @@ export default function App() {
             component={TicketAddScreen} 
             options={{ title: 'Nouveau Ticket', headerShown: false }}
           />
+          <Stack.Screen
+            name="TicketDetails"
+            component={TicketDetailsScreen}
+            options={{ title: 'Détails du Ticket' }}
+          />
         </Stack.Navigator>
-      </NavigationContainer>
+  </NavigationContainer>
+  </ToastProvider>
+      </AuthProvider>
+      </ErrorProvider>
       <StatusBar style="auto" />
     </SafeAreaProvider>
   );
