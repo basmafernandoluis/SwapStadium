@@ -122,10 +122,30 @@ export class TicketService {
 
       console.log('🎫 TicketService - Récupération tickets utilisateur');
 
-      const snapshot = await firestore.collection(this.COLLECTION_NAME)
-        .where('userId', '==', currentUser.uid)
-        .orderBy('createdAt', 'desc')
-        .get();
+      let snapshot: firebase.firestore.QuerySnapshot;
+      try {
+        snapshot = await firestore.collection(this.COLLECTION_NAME)
+          .where('userId', '==', currentUser.uid)
+          .orderBy('createdAt', 'desc')
+          .get();
+      } catch (err: any) {
+        if (err?.message?.includes('index') || err?.code === 'failed-precondition') {
+          console.warn('⚠️ TicketService - Index manquant pour (userId, createdAt desc). Fallback tri local.');
+          // Fallback sans orderBy puis tri local
+          snapshot = await firestore.collection(this.COLLECTION_NAME)
+            .where('userId', '==', currentUser.uid)
+            .get();
+          const docsSorted = snapshot.docs.sort((a, b) => {
+            const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+            const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+            return cb - ca; // desc
+          });
+          // Remplacer docs par version triée (créer objet compatible)
+          (snapshot as any).docs = docsSorted;
+        } else {
+          throw err;
+        }
+      }
 
       const tickets: Ticket[] = snapshot.docs.map((docSnapshot: firebase.firestore.DocumentSnapshot) => {
         const data = docSnapshot.data();
@@ -158,10 +178,28 @@ export class TicketService {
     try {
       console.log('🎫 TicketService - Récupération tous les tickets actifs');
 
-      const snapshot = await firestore.collection(this.COLLECTION_NAME)
-        .where('status', '==', 'active')
-        .orderBy('createdAt', 'desc')
-        .get();
+      let snapshot: firebase.firestore.QuerySnapshot;
+      try {
+        snapshot = await firestore.collection(this.COLLECTION_NAME)
+          .where('status', '==', 'active')
+          .orderBy('createdAt', 'desc')
+          .get();
+      } catch (err: any) {
+        if (err?.message?.includes('index') || err?.code === 'failed-precondition') {
+          console.warn('⚠️ TicketService - Index manquant pour (status, createdAt desc). Fallback tri local.');
+          snapshot = await firestore.collection(this.COLLECTION_NAME)
+            .where('status', '==', 'active')
+            .get();
+            const docsSorted = snapshot.docs.sort((a, b) => {
+              const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+              const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+              return cb - ca; // desc
+            });
+            (snapshot as any).docs = docsSorted;
+        } else {
+          throw err;
+        }
+      }
 
       const tickets: Ticket[] = snapshot.docs.map((docSnapshot: firebase.firestore.DocumentSnapshot) => {
         const data = docSnapshot.data();
@@ -318,5 +356,20 @@ export class TicketService {
       style: 'currency',
       currency: 'EUR'
     }).format(price);
+  }
+
+  // --- Utilitaires ajoutés (utilisés par les écrans) ---
+  static formatSeat(seat: Seat): string {
+    if (!seat) return '';
+    return `Section ${seat.section}, Rangée ${seat.row}, Place ${seat.number}`;
+  }
+
+  static formatMatch(match: Match): string {
+    if (!match) return '';
+    return `${match.homeTeam} vs ${match.awayTeam} - ${match.competition}`;
+  }
+
+  static isTicketExpired(ticket: Ticket): boolean {
+    return new Date() > ticket.expiresAt;
   }
 }
