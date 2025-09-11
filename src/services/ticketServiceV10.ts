@@ -40,7 +40,6 @@ export interface Ticket {
   expiresAt: Date;
   images: string[]; // URLs des images
   match: Match;
-  moderationStatus: 'pending' | 'approved' | 'rejected';
   preferences: string[];
   status: 'active' | 'completed' | 'cancelled' | 'expired';
   title: string;
@@ -89,7 +88,6 @@ export class TicketService {
         userId: currentUser.uid,
         userName: currentUser.displayName || currentUser.email,
         userRating: 5.0, // Rating par défaut
-        moderationStatus: 'pending',
         status: 'active',
         images: ticketData.images || [],
         preferences: ticketData.preferences || [],
@@ -143,10 +141,11 @@ export class TicketService {
 
       const snapshot = await getDocs(q);
 
-      const tickets: Ticket[] = snapshot.docs.map(docSnapshot => {
+    const tickets: Ticket[] = snapshot.docs.map((docSnapshot: any) => {
         const data = docSnapshot.data();
         return {
           id: docSnapshot.id,
+      category: data.category,
           ...data,
           createdAt: data.createdAt.toDate(),
           updatedAt: data.updatedAt.toDate(),
@@ -181,10 +180,11 @@ export class TicketService {
 
       const snapshot = await getDocs(q);
 
-      const tickets: Ticket[] = snapshot.docs.map(docSnapshot => {
+    const tickets: Ticket[] = snapshot.docs.map((docSnapshot: any) => {
         const data = docSnapshot.data();
         return {
           id: docSnapshot.id,
+      category: data.category,
           ...data,
           createdAt: data.createdAt.toDate(),
           updatedAt: data.updatedAt.toDate(),

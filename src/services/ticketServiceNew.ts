@@ -26,7 +26,6 @@ export interface Ticket {
   expiresAt: Date;
   images: string[]; // URLs des images
   match: Match;
-  moderationStatus: 'pending' | 'approved' | 'rejected';
   preferences: string[];
   status: 'active' | 'completed' | 'cancelled' | 'expired';
   title: string;
@@ -75,7 +74,6 @@ export class TicketService {
         userId: currentUser.uid,
         userName: currentUser.displayName || currentUser.email,
         userRating: 5.0, // Rating par défaut
-        moderationStatus: 'pending',
         status: 'active',
         images: ticketData.images || [],
         preferences: ticketData.preferences || [],
@@ -127,7 +125,7 @@ export class TicketService {
         .orderBy('createdAt', 'desc')
         .get();
 
-      const tickets: Ticket[] = snapshot.docs.map(doc => {
+  const tickets: Ticket[] = snapshot.docs.map((doc: any) => {
         const data = doc.data();
         return {
           id: doc.id,
@@ -159,13 +157,12 @@ export class TicketService {
 
       const snapshot = await db
         .collection(this.COLLECTION_NAME)
-        .where('status', '==', 'active')
-        .where('moderationStatus', '==', 'approved')
+  .where('status', '==', 'active')
         .orderBy('createdAt', 'desc')
         .limit(50) // Limite pour les performances
         .get();
 
-      const tickets: Ticket[] = snapshot.docs.map(doc => {
+  const tickets: Ticket[] = snapshot.docs.map((doc: any) => {
         const data = doc.data();
         return {
           id: doc.id,

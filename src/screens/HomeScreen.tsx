@@ -13,13 +13,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useTranslation } from '../hooks/useTranslation';
 import { TicketService } from '../services/ticketService';
-import { Ticket } from '../types';
+// Utilisation du type Ticket provenant du service pour éviter les divergences
+import { Ticket as ServiceTicket } from '../services/ticketService';
 import { RootStackParamList } from '../navigation/AppNavigator';
 
 const { width } = Dimensions.get('window');
 
 const HomeScreen = () => {
-  const [recentTickets, setRecentTickets] = useState<Ticket[]>([]);
+  const [recentTickets, setRecentTickets] = useState<ServiceTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
@@ -29,13 +30,17 @@ const HomeScreen = () => {
 
   const loadRecentTickets = async () => {
     try {
-      const result = await TicketService.searchTickets({
-        sortBy: 'created',
-        sortOrder: 'desc'
-      });
-      setRecentTickets(result.tickets.slice(0, 5));
+      // Utilise désormais le feed public (hors billets de l'utilisateur)
+      const result = await TicketService.getPublicActiveTickets({ limit: 20 });
+      if (result.success && result.tickets) {
+        // Filtrer uniquement les tickets avec un id défini pour correspondre à l'UI
+        setRecentTickets(result.tickets.filter(t => !!t.id).slice(0, 5) as ServiceTicket[]);
+      } else {
+        setRecentTickets([]);
+      }
     } catch (error) {
       console.error('Erreur lors du chargement des billets récents:', error);
+      setRecentTickets([]);
     } finally {
       setLoading(false);
     }
@@ -61,7 +66,7 @@ const HomeScreen = () => {
     </TouchableOpacity>
   );
 
-  const TicketCard = ({ ticket }: { ticket: Ticket }) => (
+  const TicketCard = ({ ticket }: { ticket: ServiceTicket }) => (
     <TouchableOpacity 
       style={styles.ticketCard}
       onPress={() => navigation.navigate('TicketDetails' as any, { ticketId: ticket.id })}
@@ -88,7 +93,7 @@ const HomeScreen = () => {
         </Text>
         <View style={styles.userRating}>
           <Ionicons name="star" size={12} color="#FFD700" />
-          <Text style={styles.ratingText}>{ticket.userRating.toFixed(1)}</Text>
+          <Text style={styles.ratingText}>{typeof ticket.userRating === 'number' ? ticket.userRating.toFixed(1) : '5.0'}</Text>
         </View>
       </View>
     </TouchableOpacity>

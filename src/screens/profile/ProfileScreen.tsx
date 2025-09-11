@@ -93,7 +93,7 @@ const ProfileScreen = () => {
         
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{user?.rating.toFixed(1) || '0.0'}</Text>
+            <Text style={styles.statValue}>{typeof user?.rating === 'number' ? user.rating.toFixed(1) : '0.0'}</Text>
             <Text style={styles.statLabel}>Note</Text>
           </View>
           <View style={styles.statDivider} />

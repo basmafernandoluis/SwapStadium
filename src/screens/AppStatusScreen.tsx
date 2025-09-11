@@ -19,12 +19,12 @@ const AppStatusScreen = () => {
       setStats(prev => ({ ...prev, loading: true }));
       
       // Charger les statistiques
-      const allTicketsResult = await TicketService.searchTickets({});
-      const userTicketsResult = user ? await TicketService.getUserTickets(user.id) : { tickets: [] };
+  const allTicketsResult = await TicketService.getPublicActiveTickets({ limit: 500 });
+  const userTicketsResult = user ? await TicketService.getMyTickets() : { success: true, tickets: [] };
       
       setStats({
-        userTickets: userTicketsResult.tickets.length,
-        totalTickets: allTicketsResult.tickets.length,
+  userTickets: (userTicketsResult.tickets || []).length,
+  totalTickets: (allTicketsResult.tickets || []).length,
         loading: false
       });
       

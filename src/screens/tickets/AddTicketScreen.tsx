@@ -97,7 +97,6 @@ const AddTicketScreen = () => {
         userName: user.displayName || 'Utilisateur',
         userRating: 4.5, // Note par défaut pour nouveaux utilisateurs
         status: 'active' as const,
-        moderationStatus: 'pending' as const,
         images: [], // Pour l'instant pas d'images
         preferences: {
           exchangeType: 'any' as const,
@@ -122,7 +121,7 @@ const AddTicketScreen = () => {
 
       const ticketId = await TicketService.createTicket(ticketData);
       
-      showSuccess(`🎉 Billet publié avec succès !\n\nVotre annonce "${formData.homeTeam} vs ${formData.awayTeam}" est en cours de modération et sera visible sous peu.`);
+  showSuccess(`🎉 Billet publié avec succès !\n\nVotre annonce "${formData.homeTeam} vs ${formData.awayTeam}" est maintenant visible.`);
       
       // Réinitialiser le formulaire
       setFormData({
@@ -348,12 +347,7 @@ const AddTicketScreen = () => {
           )}
         </TouchableOpacity>
 
-        <View style={styles.warningContainer}>
-          <Ionicons name="warning" size={20} color="#FF9800" />
-          <Text style={styles.warningText}>
-            Votre annonce sera vérifiée par notre équipe avant publication
-          </Text>
-        </View>
+  {/* Avertissement de modération supprimé */}
       </View>
     </ScrollView>
   );

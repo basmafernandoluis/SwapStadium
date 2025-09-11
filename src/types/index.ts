@@ -46,7 +46,6 @@ export interface Ticket {
   createdAt: Date;
   updatedAt: Date;
   expiresAt: Date;
-  moderationStatus: 'pending' | 'approved' | 'rejected';
 }
 
 export interface Exchange {

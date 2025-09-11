@@ -13,8 +13,7 @@ import { useTranslation } from '../../hooks/useTranslation';
 import { useNavigation, NavigationProp, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../hooks/useAuth';
 import { useGlobalToast } from '../../contexts/ToastContext';
-import { TicketService } from '../../services/ticketService';
-import { Ticket } from '../../types';
+import { TicketService, Ticket as ServiceTicket } from '../../services/ticketService';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 
 const MyTicketsScreen = () => {
@@ -23,7 +22,7 @@ const MyTicketsScreen = () => {
   const { user } = useAuth();
   const { showSuccess, showError } = useGlobalToast();
   
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [tickets, setTickets] = useState<ServiceTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -32,8 +31,8 @@ const MyTicketsScreen = () => {
     
     try {
       setLoading(true);
-      const result = await TicketService.getUserTickets(user.id);
-      setTickets(result.tickets);
+  const result = await TicketService.getMyTickets();
+  if (result.success && result.tickets) setTickets(result.tickets);
     } catch (error: any) {
       console.error('Erreur lors du chargement des billets:', error);
       showError('❌ Erreur lors du chargement de vos billets');
@@ -59,28 +58,26 @@ const MyTicketsScreen = () => {
     navigation.navigate('AddTicket');
   };
 
-  const handleTicketPress = (ticket: Ticket) => {
-    navigation.navigate('TicketDetails', { ticketId: ticket.id });
+  const handleTicketPress = (ticket: ServiceTicket) => {
+  if (!ticket.id) return;
+  navigation.navigate('TicketDetails', { ticketId: ticket.id });
   };
 
-  const getStatusColor = (status: string, moderationStatus: string) => {
-    if (moderationStatus === 'pending') return '#FF9800';
-    if (moderationStatus === 'rejected') return '#F44336';
+  const getStatusColor = (status: string) => {
     if (status === 'active') return '#4CAF50';
     if (status === 'exchanged') return '#2196F3';
+    if (status === 'expired') return '#9E9E9E';
     return '#9E9E9E';
   };
 
-  const getStatusText = (status: string, moderationStatus: string) => {
-    if (moderationStatus === 'pending') return 'En attente';
-    if (moderationStatus === 'rejected') return 'Refusé';
+  const getStatusText = (status: string) => {
     if (status === 'active') return 'Actif';
     if (status === 'exchanged') return 'Échangé';
     if (status === 'expired') return 'Expiré';
     return 'Suspendu';
   };
 
-  const renderTicketCard = ({ item: ticket }: { item: Ticket }) => (
+  const renderTicketCard = ({ item: ticket }: { item: ServiceTicket }) => (
     <TouchableOpacity 
       style={styles.ticketCard}
       onPress={() => handleTicketPress(ticket)}
@@ -92,10 +89,10 @@ const MyTicketsScreen = () => {
           </Text>
           <View style={[
             styles.statusBadge, 
-            { backgroundColor: getStatusColor(ticket.status, ticket.moderationStatus) }
+            { backgroundColor: getStatusColor(ticket.status) }
           ]}>
             <Text style={styles.statusText}>
-              {getStatusText(ticket.status, ticket.moderationStatus)}
+              {getStatusText(ticket.status)}
             </Text>
           </View>
         </View>
@@ -172,7 +169,7 @@ const MyTicketsScreen = () => {
           <FlatList
             data={tickets}
             renderItem={renderTicketCard}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.id!}
             contentContainerStyle={styles.listContainer}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />

@@ -135,19 +135,13 @@ const TicketCard: React.FC<TicketCardProps> = ({
           <View style={styles.userRating}>
             <Ionicons name="star" size={14} color="#FFD700" />
             <Text style={styles.ratingText}>
-              {ticket.userRating.toFixed(1)}
+              {typeof ticket.userRating === 'number' ? ticket.userRating.toFixed(1) : '5.0'}
             </Text>
           </View>
         </View>
       )}
 
-      {/* Statut de modération */}
-      {ticket.moderationStatus === 'pending' && (
-        <View style={styles.moderationBadge}>
-          <Ionicons name="time-outline" size={12} color="#FF9800" />
-          <Text style={styles.moderationText}>En attente de modération</Text>
-        </View>
-      )}
+  {/* Modération supprimée */}
     </TouchableOpacity>
   );
 };

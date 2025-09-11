@@ -11,11 +11,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../hooks/useTranslation';
-import { TicketService } from '../services/ticketService';
-import { Ticket, SearchFilters } from '../types';
+import { TicketService, Ticket as ServiceTicket } from '../services/ticketService';
+import { SearchFilters } from '../types';
 
 const SearchScreen = () => {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [tickets, setTickets] = useState<ServiceTicket[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState('');
@@ -30,8 +30,21 @@ const SearchScreen = () => {
         match: searchText || undefined
       };
       
-      const result = await TicketService.searchTickets(searchFilters);
-      setTickets(result.tickets);
+      // Remplacement: on utilise le feed public puis on applique un filtrage léger côté client
+      const result = await TicketService.getPublicActiveTickets({ limit: 100 });
+      let list = result.success && result.tickets ? result.tickets : [];
+      if (searchFilters.match) {
+        const term = searchFilters.match.toLowerCase();
+        list = list.filter(t =>
+          t.match.homeTeam.toLowerCase().includes(term) ||
+          t.match.awayTeam.toLowerCase().includes(term) ||
+          t.match.stadium.toLowerCase().includes(term)
+        );
+      }
+      if (searchFilters.category) {
+        list = list.filter(t => t.category === searchFilters.category);
+      }
+      setTickets(list);
     } catch (error) {
       console.error('Erreur lors de la recherche:', error);
       Alert.alert(t('common.error'), 'Erreur lors de la recherche');
@@ -50,7 +63,7 @@ const SearchScreen = () => {
     setRefreshing(false);
   };
 
-  const TicketItem = ({ item }: { item: Ticket }) => (
+  const TicketItem = ({ item }: { item: ServiceTicket }) => (
     <TouchableOpacity style={styles.ticketCard}>
       <View style={styles.ticketHeader}>
         <Text style={styles.matchTitle} numberOfLines={1}>
@@ -77,7 +90,7 @@ const SearchScreen = () => {
         <View style={styles.userInfo}>
           <View style={styles.userRating}>
             <Ionicons name="star" size={12} color="#FFD700" />
-            <Text style={styles.ratingText}>{item.userRating.toFixed(1)}</Text>
+            <Text style={styles.ratingText}>{typeof item.userRating === 'number' ? item.userRating.toFixed(1) : '5.0'}</Text>
           </View>
         </View>
       </View>
@@ -144,9 +157,9 @@ const SearchScreen = () => {
 
       {/* Liste des billets */}
       <FlatList
-        data={tickets}
+        data={tickets.filter(t => !!t.id)}
         renderItem={TicketItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id!}
         style={styles.list}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />

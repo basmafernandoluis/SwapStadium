@@ -27,7 +27,6 @@ export interface Ticket {
   expiresAt: Date;
   images: string[]; // URLs des images
   match: Match;
-  moderationStatus: 'pending' | 'approved' | 'rejected';
   preferences: string[];
   status: 'active' | 'completed' | 'cancelled' | 'expired';
   title: string;
@@ -76,7 +75,6 @@ export class TicketService {
         userId: currentUser.uid,
         userName: currentUser.displayName || currentUser.email,
         userRating: 5.0, // Rating par défaut
-        moderationStatus: 'pending',
         status: 'active',
         images: ticketData.images || [],
         preferences: ticketData.preferences || [],
@@ -225,6 +223,65 @@ export class TicketService {
         success: false, 
         error: 'Erreur lors de la récupération des tickets actifs' 
       };
+    }
+  }
+
+  // Nouvel endpoint: tickets actifs publics (hors tickets de l'utilisateur connecté)
+  static async getPublicActiveTickets(options?: { matchId?: string; stadium?: string; limit?: number }): Promise<TicketResult> {
+    try {
+      const currentUser = AuthService.getCurrentUser();
+      const userId = currentUser?.uid;
+
+      let baseQuery: firebase.firestore.Query = firestore.collection(this.COLLECTION_NAME)
+        .where('status', '==', 'active');
+
+      // Filtre optionnel par stade ou identifiant de match (si vous stockez un id de match plus tard)
+      if (options?.stadium) {
+        baseQuery = baseQuery.where('match.stadium', '==', options.stadium);
+      }
+
+      let snapshot: firebase.firestore.QuerySnapshot;
+      try {
+        snapshot = await baseQuery.orderBy('createdAt', 'desc').limit(options?.limit || 50).get();
+      } catch (err: any) {
+        if (err?.message?.includes('index') || err?.code === 'failed-precondition') {
+          console.warn('⚠️ TicketService - Index manquant pour feed public. Fallback tri local.');
+          snapshot = await baseQuery.get();
+          const docsSorted = snapshot.docs.sort((a, b) => {
+            const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+            const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+            return cb - ca;
+          });
+          (snapshot as any).docs = docsSorted;
+        } else {
+          throw err;
+        }
+      }
+
+      const tickets: Ticket[] = snapshot.docs
+        .map((docSnapshot: firebase.firestore.DocumentSnapshot) => {
+          const data = docSnapshot.data();
+          if (!data) return null;
+          // Exclure les billets de l'utilisateur connecté
+          if (userId && data.userId === userId) return null;
+          return {
+            id: docSnapshot.id,
+            ...data,
+            createdAt: data.createdAt.toDate(),
+            updatedAt: data.updatedAt.toDate(),
+            expiresAt: data.expiresAt.toDate(),
+            match: {
+              ...data.match,
+              date: data.match.date.toDate(),
+            },
+          } as Ticket;
+        })
+        .filter(Boolean) as Ticket[];
+
+      return { success: true, tickets };
+    } catch (error: any) {
+      console.error('❌ TicketService - Erreur feed public:', error);
+      return { success: false, error: 'Erreur lors de la récupération des tickets publics' };
     }
   }
 

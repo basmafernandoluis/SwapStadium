@@ -54,7 +54,6 @@ const AddTicketTestScreen = () => {
         userName: user.displayName || 'Utilisateur Test',
         userRating: 4.5,
         status: 'active',
-        moderationStatus: 'pending',
         images: [],
         preferences: {
           exchangeType: 'any',
@@ -66,6 +65,7 @@ const AddTicketTestScreen = () => {
       const ticketId = await TicketService.createTicket(testTicketData);
       
       showSuccess(`🎉 Billet de test créé avec succès !\n\nType: ${type === 'exchange' ? 'Échange' : 'Don'}\nID: ${ticketId}\n\nLe billet est en cours de modération.`);
+  showSuccess(`🎉 Billet de test créé avec succès !\n\nType: ${type === 'exchange' ? 'Échange' : 'Don'}\nID: ${ticketId}`);
       
     } catch (error: any) {
       console.error('Erreur lors de la création du billet de test:', error);
@@ -120,7 +120,6 @@ const AddTicketTestScreen = () => {
             userName: user.displayName || 'Utilisateur Test',
             userRating: 4.0 + Math.random(),
             status: 'active',
-            moderationStatus: 'pending',
             images: [],
             preferences: {
               exchangeType: 'any',
@@ -188,7 +187,7 @@ const AddTicketTestScreen = () => {
       <View style={styles.infoSection}>
         <Ionicons name="information-circle" size={24} color="#2196F3" />
         <Text style={styles.infoText}>
-          Ces billets de test seront créés avec le statut "pending" et devront être approuvés par modération.
+          Ces billets de test sont créés et visibles immédiatement (modération supprimée).
         </Text>
       </View>
 

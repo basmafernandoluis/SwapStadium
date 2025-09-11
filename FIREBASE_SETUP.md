@@ -116,7 +116,6 @@ service firebase.storage {
 Pour optimiser les performances et les coûts, créez ces indices composites :
 
 ### Collection: tickets
-- `status` (Ascending) + `moderationStatus` (Ascending) + `createdAt` (Descending)
 - `category` (Ascending) + `status` (Ascending) + `match.date` (Ascending)
 - `match.stadium` (Ascending) + `status` (Ascending) + `createdAt` (Descending)
 - `userId` (Ascending) + `status` (Ascending) + `createdAt` (Descending)
