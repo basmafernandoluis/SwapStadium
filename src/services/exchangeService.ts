@@ -121,6 +121,95 @@ export class ExchangeService {
 		return () => { if (unsub) unsub(); };
 	}
 
+		// S'abonner aux demandes entre deux billets (dans les deux sens) et émettre la plus récente
+		static subscribeRequestBetween(
+			aTicketId: string,
+			bTicketId: string,
+			callback: (request: ExchangeRequest | null) => void
+		): () => void {
+			let latestA: ExchangeRequest | null = null;
+			let latestB: ExchangeRequest | null = null;
+
+			const pickAndEmit = () => {
+				const pick = (x?: ExchangeRequest | null, y?: ExchangeRequest | null) => {
+					if (x && y) {
+						const xu = x.updatedAt?.getTime?.() || 0;
+						const yu = y.updatedAt?.getTime?.() || 0;
+						return xu >= yu ? x : y;
+					}
+					return x || y || null;
+				};
+				const chosen = pick(latestA, latestB);
+				callback(chosen);
+			};
+
+			const baseA = firestore.collection(this.COLLECTION)
+				.where('fromTicketId', '==', aTicketId)
+				.where('toTicketId', '==', bTicketId);
+			const baseB = firestore.collection(this.COLLECTION)
+				.where('fromTicketId', '==', bTicketId)
+				.where('toTicketId', '==', aTicketId);
+
+			let unsubA: (() => void) | null = null;
+			let unsubB: (() => void) | null = null;
+
+			const attach = (
+				base: firebase.firestore.Query,
+				assign: (req: ExchangeRequest | null) => void,
+				label: string
+			): (() => void) | null => {
+				try {
+					return base.orderBy('updatedAt', 'desc').limit(1).onSnapshot({
+						next: (snap) => {
+							const req = snap.docs.length ? this.mapDoc(snap.docs[0]) : null;
+							assign(req);
+							pickAndEmit();
+						},
+						error: (err) => {
+							if (err?.message?.includes('index')) {
+								console.warn(`⚠️ ExchangeService.subscribeRequestBetween - index manquant (${label}), fallback`);
+								const unsub = base.onSnapshot((snap2) => {
+									const docs = [...snap2.docs].sort((a,b) => {
+										const au = (a.data().updatedAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+										const bu = (b.data().updatedAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+										return bu - au;
+									});
+									const req = docs.length ? this.mapDoc(docs[0]) : null;
+									assign(req);
+									pickAndEmit();
+								});
+								return unsub;
+							} else {
+								console.error('❌ subscribeRequestBetween error', err);
+								assign(null);
+								pickAndEmit();
+							}
+						}
+					});
+				} catch (e) {
+					console.error('❌ subscribeRequestBetween attach exception', e);
+					assign(null);
+					pickAndEmit();
+					return null;
+				}
+			};
+
+			unsubA = attach(baseA, (r) => { latestA = r; }, 'A->B');
+			unsubB = attach(baseB, (r) => { latestB = r; }, 'B->A');
+
+			return () => {
+				try { if (unsubA) unsubA(); } catch {}
+				try { if (unsubB) unsubB(); } catch {}
+			};
+		}
+
+		// Trouve une demande active (pending/accepted) dans les deux sens
+		static async findOpenRequestBetween(aTicketId: string, bTicketId: string): Promise<ExchangeRequestResult> {
+			const first = await this.findOpenRequest(aTicketId, bTicketId);
+			if (first.success) return first;
+			return this.findOpenRequest(bTicketId, aTicketId);
+		}
+
 	// Trouver une demande existante entre 2 tickets (dans un état encore actif)
 	static async findOpenRequest(fromTicketId: string, toTicketId: string): Promise<ExchangeRequestResult> {
 		try {

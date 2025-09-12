@@ -151,7 +151,36 @@ const ExchangesScreen: React.FC = () => {
           </View>
         )}
         {item.status === 'accepted' && (
-          <Text style={{marginTop:6,fontSize:11,color:'#555'}}>Confirmations: demandeur {item.fromCompletedConfirmed ? '✅' : '⏳'} • destinataire {item.toCompletedConfirmed ? '✅' : '⏳'}</Text>
+          <View style={styles.confirmBanner}>
+            <View style={styles.confirmHeader}>
+              <Ionicons name="shield-checkmark" size={18} color="#0ea5e9" />
+              <Text style={styles.confirmTitle}>Confirmation en 2 étapes</Text>
+            </View>
+            {(() => {
+              const amFrom = myUid ? (item.fromUserId === myUid) : false;
+              const myDone = amFrom ? !!item.fromCompletedConfirmed : !!item.toCompletedConfirmed;
+              const otherDone = amFrom ? !!item.toCompletedConfirmed : !!item.fromCompletedConfirmed;
+              return (
+                <>
+                  <View style={styles.confirmRow}>
+                    <Ionicons name={myDone ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={myDone ? '#16a34a' : '#64748b'} />
+                    <Text style={[styles.confirmText, myDone && styles.confirmTextDone]}>Votre confirmation {myDone ? '(confirmée)' : '(en attente)'}</Text>
+                  </View>
+                  <View style={styles.confirmRow}>
+                    <Ionicons name={otherDone ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={otherDone ? '#16a34a' : '#64748b'} />
+                    <Text style={[styles.confirmText, otherDone && styles.confirmTextDone]}>Confirmation de l'autre partie {otherDone ? '(confirmée)' : '(en attente)'}</Text>
+                  </View>
+                  {!!item.selectedFromTicketId && (
+                    <View style={styles.confirmRow}>
+                      <Ionicons name="pricetag" size={16} color="#0369a1" />
+                      <Text style={styles.confirmText}>Billet choisi par le destinataire: <Text style={{fontWeight:'700'}}>{item.selectedFromTitle || item.selectedFromTicketId}</Text></Text>
+                    </View>
+                  )}
+                  <Text style={styles.confirmHint}>L'échange sera finalisé automatiquement lorsque les deux auront confirmé.</Text>
+                </>
+              );
+            })()}
+          </View>
         )}
         {!myUid && <Text style={{marginTop:6,color:'#a00',fontSize:11}}>Non connecté: actions cachées</Text>}
         {myUid && !(isIncoming || isOutgoing) && <Text style={{marginTop:6,color:'#a00',fontSize:11}}>Note: cette demande ne vous appartient pas (uid: {myUid?.slice?.(0,6)}…)</Text>}
@@ -232,6 +261,13 @@ const styles = StyleSheet.create({
   ,actionsRow:{flexDirection:'row',marginTop:10,gap:8}
   ,smallBtn:{paddingVertical:6,paddingHorizontal:12,borderRadius:6}
   ,smallBtnText:{color:'white',fontSize:12,fontWeight:'600'}
+  ,confirmBanner:{marginTop:8,backgroundColor:'#f0f9ff',borderRadius:10,padding:12,borderWidth:1,borderColor:'#bae6fd'}
+  ,confirmHeader:{flexDirection:'row',alignItems:'center',marginBottom:8}
+  ,confirmTitle:{fontSize:14,fontWeight:'700',color:'#0c4a6e',marginLeft:6}
+  ,confirmRow:{flexDirection:'row',alignItems:'center',gap:8,paddingVertical:4}
+  ,confirmText:{fontSize:12,color:'#334155'}
+  ,confirmTextDone:{color:'#065f46',fontWeight:'700'}
+  ,confirmHint:{marginTop:6,fontSize:11,color:'#475569'}
 });
 
 export default ExchangesScreen;
