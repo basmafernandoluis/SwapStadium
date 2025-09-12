@@ -131,6 +131,51 @@ export class TicketService {
     return () => { if (unsub) unsub(); };
   }
 
+  // Récupère les tickets actifs d'un utilisateur par userId (utile pour proposer une sélection au destinataire)
+  static async getUserActiveTickets(userId: string): Promise<TicketResult> {
+    try {
+      let snapshot: firebase.firestore.QuerySnapshot;
+      try {
+        snapshot = await firestore.collection(this.COLLECTION_NAME)
+          .where('userId', '==', userId)
+          .where('status', '==', 'active')
+          .orderBy('createdAt', 'desc')
+          .get();
+      } catch (err: any) {
+        if (err?.message?.includes('index') || err?.code === 'failed-precondition') {
+          snapshot = await firestore.collection(this.COLLECTION_NAME)
+            .where('userId', '==', userId)
+            .where('status', '==', 'active')
+            .get();
+          const docsSorted = snapshot.docs.sort((a, b) => {
+            const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+            const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+            return cb - ca;
+          });
+          (snapshot as any).docs = docsSorted;
+        } else {
+          throw err;
+        }
+      }
+      const tickets: Ticket[] = snapshot.docs.map((docSnapshot: firebase.firestore.DocumentSnapshot) => {
+        const data = docSnapshot.data();
+        if (!data) return null;
+        return {
+          id: docSnapshot.id,
+          ...data,
+          createdAt: data.createdAt.toDate(),
+          updatedAt: data.updatedAt.toDate(),
+          expiresAt: data.expiresAt.toDate(),
+          match: { ...data.match, date: data.match.date.toDate() }
+        } as Ticket;
+      }).filter(Boolean) as Ticket[];
+      return { success: true, tickets };
+    } catch (error) {
+      console.error('❌ TicketService.getUserActiveTickets error', error);
+      return { success: false, error: 'Erreur lors de la récupération des tickets actifs' };
+    }
+  }
+
   static subscribePublicActiveTickets(options: { stadium?: string; limit?: number } | undefined, callback: (tickets: Ticket[]) => void): () => void {
     const currentUser = AuthService.getCurrentUser();
     const userId = currentUser?.uid;

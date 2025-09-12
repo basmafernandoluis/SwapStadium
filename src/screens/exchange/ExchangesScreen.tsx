@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity, ActivityIndicator, Modal, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ExchangeService, ExchangeRequest } from '../../services/exchangeService';
 import { AuthService } from '../../services/authService';
-import { TicketService } from '../../services/ticketService';
+import { TicketService, Ticket } from '../../services/ticketService';
 import { useGlobalToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../hooks/useAuth';
 
-interface DecoratedExchange extends ExchangeRequest { fromTitle?: string; toTitle?: string; }
+interface DecoratedExchange extends ExchangeRequest { fromTitle?: string; toTitle?: string; selectedFromTitle?: string; }
 
 const ExchangesScreen: React.FC = () => {
   const { user } = useAuth();
@@ -17,14 +17,18 @@ const ExchangesScreen: React.FC = () => {
   const [outgoing, setOutgoing] = useState<DecoratedExchange[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectVisible, setSelectVisible] = useState(false);
+  const [selectingFor, setSelectingFor] = useState<ExchangeRequest | null>(null);
+  const [requesterActiveTickets, setRequesterActiveTickets] = useState<Ticket[]>([]);
+  const [selectedFromId, setSelectedFromId] = useState<string | null>(null);
 
   const decorate = async (reqs: ExchangeRequest[]): Promise<DecoratedExchange[]> => {
     const map: Record<string,string> = {};
-    const needIds = Array.from(new Set(reqs.flatMap(r => [r.fromTicketId, r.toTicketId])));
+  const needIds = Array.from(new Set(reqs.flatMap(r => [r.fromTicketId, r.toTicketId, r.selectedFromTicketId].filter(Boolean) as string[])));
     await Promise.all(needIds.map(async id => {
       try { const t = await TicketService.getTicketById(id); if(t?.id) map[id]=t.title || `${t.match.homeTeam} vs ${t.match.awayTeam}`; } catch(e){}
     }));
-    return reqs.map(r => ({ ...r, fromTitle: map[r.fromTicketId], toTitle: map[r.toTicketId] }));
+  return reqs.map(r => ({ ...r, fromTitle: map[r.fromTicketId], toTitle: map[r.toTicketId], selectedFromTitle: r.selectedFromTicketId ? map[r.selectedFromTicketId] : undefined }));
   };
 
   // Real-time subscriptions
@@ -66,6 +70,36 @@ const ExchangesScreen: React.FC = () => {
     }
   };
 
+  const openSelectForAccept = async (req: ExchangeRequest) => {
+    try {
+      const list = await TicketService.getUserActiveTickets(req.fromUserId);
+      if (!list.success) { showError(list.error || 'Impossible de charger'); return; }
+      const tickets = list.tickets || [];
+      if (!tickets.length) { showError("L'utilisateur n'a aucun billet actif"); return; }
+      setRequesterActiveTickets(tickets);
+      setSelectedFromId(tickets[0]?.id || null);
+      setSelectingFor(req);
+      setSelectVisible(true);
+    } catch (e:any) {
+      console.error('openSelectForAccept error', e);
+      showError('Erreur de chargement');
+    }
+  };
+
+  const confirmAcceptWithSelection = async () => {
+    if (!selectingFor || !selectedFromId) return;
+    try {
+      const res = await ExchangeService.acceptWithSelection(selectingFor.id!, selectedFromId);
+      if (!res.success) showError(res.error || 'Acceptation échouée');
+      setSelectVisible(false);
+      setSelectingFor(null);
+      setSelectedFromId(null);
+    } catch (e:any) {
+      console.error('confirmAcceptWithSelection error', e);
+      showError('Erreur d\'acceptation');
+    }
+  };
+
   const renderReq = ({ item }: { item: DecoratedExchange }) => {
     const isIncoming = !!myUid && item.toUserId === myUid;
     const isOutgoing = !!myUid && item.fromUserId === myUid;
@@ -73,7 +107,7 @@ const ExchangesScreen: React.FC = () => {
       <View style={styles.reqCard}>
         <View style={styles.rowBetween}>
           <View style={{flex:1}}>
-            <Text style={styles.reqTitle} numberOfLines={1}>{item.fromTitle || item.fromTicketId}</Text>
+            <Text style={styles.reqTitle} numberOfLines={1}>{item.selectedFromTitle || item.fromTitle || item.fromTicketId}</Text>
             <Ionicons name="swap-horizontal" size={16} color="#2196F3" style={{marginVertical:4}} />
             <Text style={styles.reqTitle} numberOfLines={1}>{item.toTitle || item.toTicketId}</Text>
           </View>
@@ -87,7 +121,7 @@ const ExchangesScreen: React.FC = () => {
           <View style={styles.actionsRow}>
             {isIncoming && item.status === 'pending' && (
               <>
-                <TouchableOpacity style={[styles.smallBtn, {backgroundColor:'#4CAF50'}]} onPress={()=>actOn('accept', item.id!)}>
+                <TouchableOpacity style={[styles.smallBtn, {backgroundColor:'#4CAF50'}]} onPress={()=>openSelectForAccept(item)}>
                   <Text style={styles.smallBtnText}>Accepter</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.smallBtn, {backgroundColor:'#F44336'}]} onPress={()=>actOn('reject', item.id!)}>
@@ -101,13 +135,23 @@ const ExchangesScreen: React.FC = () => {
               </TouchableOpacity>
             )}
             {item.status === 'accepted' && (isIncoming || isOutgoing) && (
-              <TouchableOpacity style={[styles.smallBtn, {backgroundColor:'#1976D2'}]} onPress={async ()=>{
-                try { const res = await ExchangeService.complete(item.id!); if(!res.success) showError(res.error || 'Finalisation échouée'); } catch(e:any){ console.error(e); showError('Erreur finalisation'); }
-              }}>
-                <Text style={styles.smallBtnText}>Marquer comme échangé</Text>
-              </TouchableOpacity>
+              <>
+                {isOutgoing && (
+                  <TouchableOpacity style={[styles.smallBtn, {backgroundColor:'#9E9E9E'}]} onPress={()=>actOn('cancel', item.id!)}>
+                    <Text style={styles.smallBtnText}>Annuler</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={[styles.smallBtn, {backgroundColor:'#1976D2'}]} onPress={async ()=>{
+                  try { const res = await (ExchangeService as any).confirmComplete?.(item.id!); if(!res?.success) showError(res?.error || 'Confirmation échouée'); } catch(e:any){ console.error(e); showError('Erreur confirmation'); }
+                }}>
+                  <Text style={styles.smallBtnText}>Je confirme l'échange</Text>
+                </TouchableOpacity>
+              </>
             )}
           </View>
+        )}
+        {item.status === 'accepted' && (
+          <Text style={{marginTop:6,fontSize:11,color:'#555'}}>Confirmations: demandeur {item.fromCompletedConfirmed ? '✅' : '⏳'} • destinataire {item.toCompletedConfirmed ? '✅' : '⏳'}</Text>
         )}
         {!myUid && <Text style={{marginTop:6,color:'#a00',fontSize:11}}>Non connecté: actions cachées</Text>}
         {myUid && !(isIncoming || isOutgoing) && <Text style={{marginTop:6,color:'#a00',fontSize:11}}>Note: cette demande ne vous appartient pas (uid: {myUid?.slice?.(0,6)}…)</Text>}
@@ -140,6 +184,34 @@ const ExchangesScreen: React.FC = () => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={styles.list}
       />
+      {/* Modal de sélection du billet du demandeur */}
+      <Modal visible={selectVisible} animationType="slide" transparent onRequestClose={()=>setSelectVisible(false)}>
+        <View style={mstyles.overlay}>
+          <View style={mstyles.card}>
+            <Text style={mstyles.title}>Choisir le billet du demandeur</Text>
+            <ScrollView style={{maxHeight: 320}}>
+              {requesterActiveTickets.map(t => (
+                <TouchableOpacity key={t.id} style={[mstyles.option, selectedFromId===t.id && mstyles.optionSelected]} onPress={()=>setSelectedFromId(t.id!)}>
+                  <View style={{flex:1}}>
+                    <Text style={mstyles.optTitle}>{t.title}</Text>
+                    <Text style={mstyles.optSub}>{t.match.homeTeam} vs {t.match.awayTeam}</Text>
+                    <Text style={mstyles.optSub}>Section {t.currentSeat.section} • Rangée {t.currentSeat.row} • Place {String((t.currentSeat as any).number)}</Text>
+                  </View>
+                  <View style={[mstyles.radio, selectedFromId===t.id && mstyles.radioSel]} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <View style={{flexDirection:'row', gap: 12, marginTop: 10}}>
+              <TouchableOpacity style={[styles.smallBtn, {backgroundColor:'#9E9E9E'}]} onPress={()=>setSelectVisible(false)}>
+                <Text style={styles.smallBtnText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.smallBtn, {backgroundColor:'#4CAF50', opacity: selectedFromId?1:0.5}]} disabled={!selectedFromId} onPress={confirmAcceptWithSelection}>
+                <Text style={styles.smallBtnText}>Confirmer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -163,3 +235,15 @@ const styles = StyleSheet.create({
 });
 
 export default ExchangesScreen;
+
+const mstyles = StyleSheet.create({
+  overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.35)',justifyContent:'flex-end'},
+  card:{backgroundColor:'white',padding:16,borderTopLeftRadius:16,borderTopRightRadius:16,shadowColor:'#000',shadowOpacity:0.2,shadowRadius:8,elevation:8},
+  title:{fontSize:18,fontWeight:'700',color:'#111',marginBottom:8},
+  option:{flexDirection:'row',alignItems:'center',paddingVertical:12,paddingHorizontal:8,borderRadius:10,backgroundColor:'#f8f9fa',marginBottom:8},
+  optionSelected:{borderWidth:2,borderColor:'#2196F3',backgroundColor:'#eef6ff'},
+  optTitle:{fontSize:15,fontWeight:'700',color:'#111'},
+  optSub:{fontSize:12,color:'#555',marginTop:2},
+  radio:{width:18,height:18,borderRadius:9,borderWidth:2,borderColor:'#999',backgroundColor:'white',marginLeft:12},
+  radioSel:{borderColor:'#2196F3',backgroundColor:'#2196F3'}
+});

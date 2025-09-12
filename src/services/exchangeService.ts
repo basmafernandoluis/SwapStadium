@@ -12,10 +12,15 @@ export interface ExchangeRequest {
 	toTicketId: string;
 	fromUserId: string;
 	toUserId: string;
+	// Optionnel: si le destinataire souhaite choisir un billet spécifique du demandeur
+	selectedFromTicketId?: string;
 	message?: string;
 	status: ExchangeRequestStatus;
 	createdAt: Date;
 	updatedAt: Date;
+	// Confirmation bilatérale de finalisation
+	fromCompletedConfirmed?: boolean;
+	toCompletedConfirmed?: boolean;
 	fromContactRequested?: boolean;
 	toContactRequested?: boolean;
 	fromContactShared?: boolean;
@@ -188,6 +193,8 @@ export class ExchangeService {
 				status: 'pending',
 				createdAt: now,
 				updatedAt: now,
+						fromCompletedConfirmed: false,
+						toCompletedConfirmed: false,
 				fromContactRequested: false,
 				toContactRequested: false,
 				fromContactShared: false,
@@ -305,6 +312,39 @@ export class ExchangeService {
 		}
 	}
 
+	// Variante d'acceptation permettant au destinataire de choisir un billet précis du demandeur
+	static async acceptWithSelection(requestId: string, selectedFromTicketId: string): Promise<ExchangeRequestResult> {
+		try {
+			const currentUser = AuthService.getCurrentUser();
+			if (!currentUser) return { success: false, error: 'Utilisateur non connecté' };
+
+			const reqRef = firestore.collection(this.COLLECTION).doc(requestId);
+			const result = await firestore.runTransaction(async (tx) => {
+				const reqSnap = await tx.get(reqRef);
+				if (!reqSnap.exists) throw new Error('Demande introuvable');
+				const data: any = reqSnap.data();
+				if (data.toUserId !== currentUser.uid) throw new Error('Non autorisé');
+				if (data.status !== 'pending') throw new Error('Statut invalide');
+
+				// Valider que le ticket sélectionné appartient bien au demandeur et est actif
+				const fromTicketRef = firestore.collection('tickets').doc(selectedFromTicketId);
+				const fromTicketSnap = await tx.get(fromTicketRef);
+				if (!fromTicketSnap.exists) throw new Error('Ticket sélectionné introuvable');
+				const fromT: any = fromTicketSnap.data();
+				if (fromT.userId !== data.fromUserId) throw new Error('Ticket non valide');
+				if (fromT.status !== 'active') throw new Error('Ticket non actif');
+
+				tx.update(reqRef, { status: 'accepted', selectedFromTicketId, updatedAt: firebase.firestore.Timestamp.fromDate(new Date()) });
+				return { id: reqSnap.id, ...data, status: 'accepted', selectedFromTicketId };
+			});
+
+			return { success: true, request: this.mapRaw(result) };
+		} catch (error) {
+			console.error('❌ ExchangeService - Erreur acceptation avec sélection:', error);
+			return { success: false, error: (error as any)?.message || 'Erreur acceptation' };
+		}
+	}
+
 	static async reject(requestId: string): Promise<ExchangeRequestResult> {
 		return this.updateStatus(requestId, 'rejected');
 	}
@@ -331,27 +371,78 @@ export class ExchangeService {
 						}
 						const nowTs = firebase.firestore.Timestamp.fromDate(new Date());
 
-						// Mettre la demande en completed
-						tx.update(reqRef, { status: 'completed', updatedAt: nowTs });
+									// Ancienne sémantique: on finalisait directement. Désormais, on considère cela comme une confirmation unique.
+									const isFrom = data.fromUserId === currentUser.uid;
+									const newFlags = {
+										fromCompletedConfirmed: !!(isFrom ? true : data.fromCompletedConfirmed),
+										toCompletedConfirmed: !!(isFrom ? data.toCompletedConfirmed : true)
+									};
+									// Appliquer le flag de confirmation de l'utilisateur courant
+									tx.update(reqRef, { ...newFlags, updatedAt: nowTs });
 
-						// Mettre les deux billets en completed
-						const fromTicketRef = firestore.collection('tickets').doc(data.fromTicketId);
-						const toTicketRef = firestore.collection('tickets').doc(data.toTicketId);
+									// Si les deux ont confirmé, on passe en completed et on met à jour les deux billets
+									if (newFlags.fromCompletedConfirmed && newFlags.toCompletedConfirmed) {
+										tx.update(reqRef, { status: 'completed', updatedAt: nowTs });
+										const effectiveFromId = data.selectedFromTicketId || data.fromTicketId;
+										const fromTicketRef = firestore.collection('tickets').doc(effectiveFromId);
+										const toTicketRef = firestore.collection('tickets').doc(data.toTicketId);
+										tx.update(fromTicketRef, { status: 'completed', updatedAt: nowTs });
+										tx.update(toTicketRef, { status: 'completed', updatedAt: nowTs });
+										return { id: snap.id, ...data, status: 'completed', updatedAt: nowTs, ...newFlags };
+									}
 
-						tx.update(fromTicketRef, { status: 'completed', updatedAt: nowTs });
-						tx.update(toTicketRef, { status: 'completed', updatedAt: nowTs });
-
-						return { id: snap.id, ...data, status: 'completed', updatedAt: nowTs };
+									return { id: snap.id, ...data, updatedAt: nowTs, ...newFlags };
 					});
 
-					return { success: true, request: this.mapRaw(result) };
+								return { success: true, request: this.mapRaw(result) };
 				} catch (error) {
 					console.error('❌ ExchangeService - Erreur completion:', error);
 					return { success: false, error: (error as any)?.message || 'Erreur finalisation' };
 				}
 			}
 
-	private static async updateStatus(requestId: string, status: ExchangeRequestStatus): Promise<ExchangeRequestResult> {
+				// Nouvelle méthode: confirme l'échange pour l'utilisateur courant; finalise uniquement si les deux ont confirmé
+				static async confirmComplete(requestId: string): Promise<ExchangeRequestResult> {
+					try {
+						const currentUser = AuthService.getCurrentUser();
+						if (!currentUser) return { success: false, error: 'Utilisateur non connecté' };
+						const reqRef = firestore.collection(this.COLLECTION).doc(requestId);
+						const result = await firestore.runTransaction(async (tx) => {
+							const snap = await tx.get(reqRef);
+							if (!snap.exists) throw new Error('Demande introuvable');
+							const data: any = snap.data();
+							if (!['accepted'].includes((data.status || '').toLowerCase())) {
+								// Si déjà completed, on est idempotent
+								if ((data.status || '').toLowerCase() === 'completed') return { id: snap.id, ...data };
+								throw new Error('Statut invalide');
+							}
+							const nowTs = firebase.firestore.Timestamp.fromDate(new Date());
+							const isFrom = data.fromUserId === currentUser.uid;
+							const flags = {
+								fromCompletedConfirmed: !!(isFrom ? true : data.fromCompletedConfirmed),
+								toCompletedConfirmed:   !!(isFrom ? data.toCompletedConfirmed : true),
+							};
+							tx.update(reqRef, { ...flags, updatedAt: nowTs });
+							if (flags.fromCompletedConfirmed && flags.toCompletedConfirmed) {
+								// Finaliser
+								const effectiveFromId = data.selectedFromTicketId || data.fromTicketId;
+								const fromTicketRef = firestore.collection('tickets').doc(effectiveFromId);
+								const toTicketRef = firestore.collection('tickets').doc(data.toTicketId);
+								tx.update(reqRef, { status: 'completed', updatedAt: nowTs });
+								tx.update(fromTicketRef, { status: 'completed', updatedAt: nowTs });
+								tx.update(toTicketRef, { status: 'completed', updatedAt: nowTs });
+								return { id: snap.id, ...data, status: 'completed', ...flags, updatedAt: nowTs };
+							}
+							return { id: snap.id, ...data, ...flags, updatedAt: nowTs };
+						});
+						return { success: true, request: this.mapRaw(result) };
+					} catch (error) {
+						console.error('❌ ExchangeService - Erreur confirmComplete:', error);
+						return { success: false, error: (error as any)?.message || 'Erreur de confirmation' };
+					}
+				}
+
+		private static async updateStatus(requestId: string, status: ExchangeRequestStatus): Promise<ExchangeRequestResult> {
 		try {
 			const currentUser = AuthService.getCurrentUser();
 			if (!currentUser) return { success: false, error: 'Utilisateur non connecté' };
@@ -362,7 +453,19 @@ export class ExchangeService {
 			if (data.fromUserId !== currentUser.uid && data.toUserId !== currentUser.uid) {
 				return { success: false, error: 'Non autorisé' };
 			}
-			if (data.status !== 'pending') return { success: false, error: 'Statut non modifiable' };
+				// Règles: 'pending' -> cancel (fromUser ou toUser) / reject (toUser)
+				//         'accepted' -> cancel autorisé par le demandeur (fromUser) uniquement pour refuser le choix
+				const currentStatus = (data.status || '').toLowerCase();
+				const isFrom = data.fromUserId === currentUser.uid;
+				if (currentStatus === 'pending') {
+					// ok
+				} else if (currentStatus === 'accepted') {
+					if (!(status === 'cancelled' && isFrom)) {
+						return { success: false, error: 'Statut non modifiable' };
+					}
+				} else {
+					return { success: false, error: 'Statut non modifiable' };
+				}
 			await reqRef.update({ status, updatedAt: firebase.firestore.Timestamp.fromDate(new Date()) });
 			return { success: true, request: this.mapDoc(await reqRef.get()) };
 		} catch (error) {
@@ -437,10 +540,13 @@ export class ExchangeService {
 			toTicketId: data.toTicketId,
 			fromUserId: data.fromUserId,
 			toUserId: data.toUserId,
+			selectedFromTicketId: data.selectedFromTicketId,
 			message: data.message,
 				status: (data.status || 'pending').toLowerCase(),
 			createdAt: data.createdAt.toDate(),
 			updatedAt: data.updatedAt.toDate(),
+				fromCompletedConfirmed: data.fromCompletedConfirmed || false,
+				toCompletedConfirmed: data.toCompletedConfirmed || false,
 			fromContactRequested: data.fromContactRequested || false,
 			toContactRequested: data.toContactRequested || false,
 			fromContactShared: data.fromContactShared || false,
@@ -461,6 +567,9 @@ export class ExchangeService {
 				status: (raw.status || 'pending').toLowerCase(),
 			createdAt: raw.createdAt?.toDate ? raw.createdAt.toDate() : new Date(raw.createdAt),
 			updatedAt: raw.updatedAt?.toDate ? raw.updatedAt.toDate() : new Date(raw.updatedAt),
+				selectedFromTicketId: raw.selectedFromTicketId,
+				fromCompletedConfirmed: !!raw.fromCompletedConfirmed,
+				toCompletedConfirmed: !!raw.toCompletedConfirmed,
 		};
 	}
 }
