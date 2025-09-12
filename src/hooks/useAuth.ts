@@ -1,16 +1,17 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import firebase from 'firebase/app';
 import { AuthService } from '../services/authService';
-import { User } from '../types';
+
+// Harmoniser le type d'utilisateur sur celui d'AuthService (avec uid)
+type AuthUser = import('../services/authService').User;
 
 interface AuthContextType {
-  user: User | null;
-  firebaseUser: firebase.User | null;
+  user: AuthUser | null;
+  // firebaseUser legacy: on garde any pour compatibilité d'API mais on y met le même objet
+  firebaseUser: any | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signOut: () => Promise<void>;
-  updateProfile: (updates: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,93 +24,63 @@ export const useAuth = () => {
   return context;
 };
 
-export const useAuthProvider = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [firebaseUser, setFirebaseUser] = useState<firebase.User | null>(null);
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = AuthService.onAuthStateChanged(async (firebaseUser) => {
-      setFirebaseUser(firebaseUser);
-      
-      if (firebaseUser) {
-        try {
-          const userData = await AuthService.getCurrentUser();
-          setUser(userData);
-        } catch (error) {
-          console.error('Erreur lors de la récupération des données utilisateur:', error);
-          setUser(null);
-        }
-      } else {
-        setUser(null);
-      }
-      
+    const unsubscribe = AuthService.onAuthStateChanged((u) => {
+      // u est déjà de type AuthUser (ou null) via AuthService
+      setUser(u);
+      setFirebaseUser(u);
       setLoading(false);
     });
-
     return unsubscribe;
   }, []);
 
   const signIn = async (email: string, password: string) => {
     setLoading(true);
     try {
-      const userData = await AuthService.signIn(email, password);
-      setUser(userData);
-    } catch (error) {
+      const res = await AuthService.signIn(email, password);
+      if (!res.success || !res.user) {
+        throw new Error(res.error || 'Connexion échouée');
+      }
+      setUser(res.user);
+      setFirebaseUser(res.user);
+    } finally {
       setLoading(false);
-      throw error;
     }
   };
 
   const signUp = async (email: string, password: string, displayName: string) => {
     setLoading(true);
     try {
-      const userData = await AuthService.signUp(email, password, displayName);
-      setUser(userData);
-    } catch (error) {
+      const res = await AuthService.signUp(email, password, displayName);
+      if (!res.success || !res.user) {
+        throw new Error(res.error || 'Inscription échouée');
+      }
+      setUser(res.user);
+      setFirebaseUser(res.user);
+    } finally {
       setLoading(false);
-      throw error;
     }
   };
 
   const signOut = async () => {
-    try {
-      await AuthService.signOut();
-      setUser(null);
-      setFirebaseUser(null);
-    } catch (error) {
-      throw error;
-    }
+    await AuthService.signOut();
+    setUser(null);
+    setFirebaseUser(null);
   };
 
-  const updateProfile = async (updates: Partial<User>) => {
-    if (!user) throw new Error('Aucun utilisateur connecté');
-    
-    try {
-      await AuthService.updateUserProfile(user.id, updates);
-      setUser({ ...user, ...updates });
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  return {
+  const value: AuthContextType = {
     user,
     firebaseUser,
     loading,
     signIn,
     signUp,
     signOut,
-    updateProfile,
   };
-};
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const authValue = useAuthProvider();
-  
-  return React.createElement(
-    AuthContext.Provider,
-    { value: authValue },
-    children
-  );
+  return React.createElement(AuthContext.Provider, { value }, children);
 };

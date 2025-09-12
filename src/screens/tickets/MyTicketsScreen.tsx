@@ -26,33 +26,21 @@ const MyTicketsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadUserTickets = async () => {
-    if (!user) return;
-    
-    try {
-      setLoading(true);
-  const result = await TicketService.getMyTickets();
-  if (result.success && result.tickets) setTickets(result.tickets);
-    } catch (error: any) {
-      console.error('Erreur lors du chargement des billets:', error);
-      showError('❌ Erreur lors du chargement de vos billets');
-    } finally {
+  useEffect(() => {
+    if (!user) return;    
+    setLoading(true);
+    const unsub = TicketService.subscribeMyTickets((tks) => {
+      setTickets(tks);
       setLoading(false);
-    }
-  };
+    });
+    return () => { unsub(); };
+  }, [user]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadUserTickets();
-    setRefreshing(false);
+    // En mode temps réel les données sont déjà fraîches ; on peut juste recalculer un tri si besoin
+    setTimeout(()=> setRefreshing(false), 400);
   };
-
-  // Charger les billets à l'ouverture de l'écran
-  useFocusEffect(
-    React.useCallback(() => {
-      loadUserTickets();
-    }, [user])
-  );
 
   const handleAddTicket = () => {
     navigation.navigate('AddTicket');

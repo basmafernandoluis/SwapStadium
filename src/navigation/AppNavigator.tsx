@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { Text } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,8 +13,7 @@ import PublicTicketsScreen from '../screens/tickets/PublicTicketsScreen';
 import AddTicketScreen from '../screens/tickets/AddTicketScreen';
 import MyTicketsScreen from '../screens/tickets/MyTicketsScreen';
 import TicketDetailsScreen from '../screens/tickets/TicketDetailsScreen';
-// import ExchangeScreen from '../screens/exchange/ExchangeScreen';
-// import ExchangeDetailsScreen from '../screens/exchange/ExchangeDetailsScreen';
+import ExchangesScreen from '../screens/exchange/ExchangesScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
@@ -40,9 +40,9 @@ export type RootStackParamList = {
   Search: undefined;
   AddTicket: undefined;
   MyTickets: undefined;
+  Exchanges?: undefined; // Ajout pour cohérence avec l'onglet Exchanges
   TicketDetails: { ticketId: string };
-  Exchange: undefined;
-  ExchangeDetails: { exchangeId: string };
+  // Legacy Exchange routes removed
   Profile: undefined;
   EditProfile: undefined;
   Notifications: undefined;
@@ -84,7 +84,7 @@ const TabNavigator = () => {
             iconName = focused ? 'albums' : 'albums-outline';
           } else if (route.name === 'MyTickets') {
             iconName = focused ? 'ticket' : 'ticket-outline';
-          } else if (route.name === 'Exchange') {
+          } else if (route.name === 'Exchanges') {
             iconName = focused ? 'swap-horizontal' : 'swap-horizontal-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
@@ -102,17 +102,22 @@ const TabNavigator = () => {
       <Tab.Screen 
         name="Home" 
         component={HomeScreen} 
-        options={{ title: t('common.appName') }}
+        options={{ headerTitle: () => <Text style={{fontSize:16,fontWeight:'600'}}>{t('common.appName')}</Text> }}
       />
       <Tab.Screen 
         name="Search" 
         component={PublicTicketsScreen}
-        options={{ title: 'Billets' }}
+        options={{ headerTitle: () => <Text style={{fontSize:16,fontWeight:'600'}}>Billets</Text> }}
       />
       <Tab.Screen 
         name="MyTickets" 
         component={MyTicketsScreen}
-        options={{ title: t('tickets.title') }}
+        options={{ headerTitle: () => <Text style={{fontSize:16,fontWeight:'600'}}>{t('tickets.title')}</Text> }}
+      />
+      <Tab.Screen
+        name="Exchanges"
+        component={ExchangesScreen}
+        options={{ headerTitle: () => <Text style={{fontSize:16,fontWeight:'600'}}>Échanges</Text> }}
       />
       {/* <Tab.Screen 
         name="Exchange" 
@@ -146,12 +151,12 @@ const MainStack = () => {
       <Stack.Screen 
         name="AddTicket" 
         component={AddTicketScreen}
-        options={{ title: t('tickets.addTicket') }}
+        options={{ headerTitle: () => <Text style={{fontSize:16,fontWeight:'600'}}>{t('tickets.addTicket')}</Text> }}
       />
       <Stack.Screen 
         name="TicketDetails" 
         component={TicketDetailsScreen}
-        options={{ title: t('tickets.ticketDetails') }}
+        options={{ headerTitle: () => <Text style={{fontSize:16,fontWeight:'600'}}>{t('tickets.ticketDetails')}</Text> }}
       />
       {/* <Stack.Screen 
         name="ExchangeDetails" 
@@ -161,17 +166,17 @@ const MainStack = () => {
       <Stack.Screen 
         name="EditProfile" 
         component={EditProfileScreen}
-        options={{ title: t('profile.editProfile') }}
+        options={{ headerTitle: () => <Text style={{fontSize:16,fontWeight:'600'}}>{t('profile.editProfile')}</Text> }}
       />
       <Stack.Screen 
         name="Notifications" 
         component={NotificationsScreen}
-        options={{ title: t('notifications.title') }}
+        options={{ headerTitle: () => <Text style={{fontSize:16,fontWeight:'600'}}>{t('notifications.title')}</Text> }}
       />
       <Stack.Screen 
         name="Terms" 
         component={TermsScreen}
-        options={{ title: t('terms.title') }}
+        options={{ headerTitle: () => <Text style={{fontSize:16,fontWeight:'600'}}>{t('terms.title')}</Text> }}
       />
     </Stack.Navigator>
   );

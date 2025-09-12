@@ -2,6 +2,9 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TicketService, Ticket } from '../../services/ticketService';
+import { ExchangeService } from '../../services/exchangeService';
+import { useGlobalToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../hooks/useAuth';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 
@@ -10,25 +13,38 @@ const PublicTicketsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const { showSuccess, showError } = useGlobalToast();
+  const { user } = useAuth();
 
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      const result = await TicketService.getPublicActiveTickets({ limit: 100 });
-      if (result.success && result.tickets) {
-        setTickets(result.tickets);
-      }
-    } finally {
+  useEffect(() => {
+    setLoading(true);
+    const unsub = TicketService.subscribePublicActiveTickets({ limit: 100 }, (tks) => {
+      setTickets(tks);
       setLoading(false);
-    }
+    });
+    return () => { unsub(); };
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
   const onRefresh = async () => {
+    // Avec snapshot temps réel, pas besoin de refetch; on simule juste un spinner court
     setRefreshing(true);
-    await load();
-    setRefreshing(false);
+    setTimeout(()=> setRefreshing(false), 400);
+  };
+
+  const handleQuickExchange = async (target: Ticket) => {
+    try {
+      if (!user) { showError('Connexion requise'); return; }
+      const myTicketsRes = await TicketService.getMyTickets();
+      const myActive = myTicketsRes.success && myTicketsRes.tickets?.find(t => t.status === 'active');
+      if (!myActive) { showError('Aucun de vos billets actifs'); return; }
+      if (!myActive.id || !target.id) { showError('Billet invalide'); return; }
+      const existing = await (ExchangeService as any).findOpenRequest?.(myActive.id, target.id);
+      if (existing?.success) { showError('Demande déjà existante'); return; }
+      const res = await ExchangeService.createRequest(myActive.id, target.id, undefined);
+      if (res.success) showSuccess('Demande envoyée ✅'); else showError(res.error || 'Erreur demande');
+    } catch(e:any){
+      console.error('Quick exchange error', e); showError('Erreur interne');
+    }
   };
 
   const renderItem = ({ item }: { item: Ticket }) => (
@@ -45,6 +61,12 @@ const PublicTicketsScreen: React.FC = () => {
         <Text style={styles.desired}>Souhaite: Section {item.desiredSeat.section}{item.desiredSeat.row && ` / Rangée ${item.desiredSeat.row}`}</Text>
       )}
       <Text style={styles.desc} numberOfLines={2}>{item.description}</Text>
+      {item.category === 'exchange' && (
+        <TouchableOpacity style={styles.exchangeBtn} onPress={() => handleQuickExchange(item)}>
+          <Ionicons name="swap-horizontal" size={16} color="white" />
+          <Text style={styles.exchangeBtnText}>Proposer un échange</Text>
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
   );
 
@@ -93,6 +115,8 @@ const styles = StyleSheet.create({
   seat:{ fontSize:13, color:'#222', marginBottom:2 },
   desired:{ fontSize:12, color:'#1976D2', marginBottom:4 },
   desc:{ fontSize:12, color:'#555' },
+  exchangeBtn:{ marginTop:8, flexDirection:'row', alignItems:'center', backgroundColor:'#2196F3', paddingVertical:8, paddingHorizontal:12, borderRadius:8, alignSelf:'flex-start' },
+  exchangeBtnText:{ color:'white', marginLeft:6, fontSize:13, fontWeight:'600' },
   emptyTitle:{ marginTop:16, fontSize:18, fontWeight:'600', color:'#333' },
   emptySubtitle:{ marginTop:8, fontSize:14, color:'#666', textAlign:'center' }
 });

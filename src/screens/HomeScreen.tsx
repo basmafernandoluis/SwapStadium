@@ -143,7 +143,8 @@ const HomeScreen = () => {
             title={t('exchange.myExchanges')}
             subtitle="Gérez vos échanges"
             color="#FF9800"
-            onPress={() => navigation.navigate('Exchange' as never)}
+            // Correction: l'onglet réel est "Exchanges" (pluriel)
+            onPress={() => navigation.navigate('Exchanges' as never)}
           />
         </View>
       </View>

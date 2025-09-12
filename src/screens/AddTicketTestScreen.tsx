@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useGlobalToast } from '../contexts/ToastContext';
 import { TicketService } from '../services/ticketService';
-import { Ticket } from '../types';
+import type { CreateTicketData } from '../services/ticketService';
 
 const AddTicketTestScreen = () => {
   const { user } = useAuth();
@@ -27,7 +27,7 @@ const AddTicketTestScreen = () => {
     try {
       setLoading(true);
 
-      const testTicketData: Omit<Ticket, 'id' | 'createdAt' | 'updatedAt'> = {
+      const testTicketData: CreateTicketData = {
         title: type === 'exchange' ? 'PSG vs OM - Échange' : 'PSG vs OM - Don',
         match: {
           homeTeam: 'Paris Saint-Germain',
@@ -39,27 +39,22 @@ const AddTicketTestScreen = () => {
         currentSeat: {
           section: 'Tribune Paris',
           row: '15',
-          number: '120'
+          number: 120
         },
-        desiredSeat: type === 'exchange' ? {
-          section: 'Tribune Boulogne',
-          row: '10',
-          number: '50'
-        } : undefined,
+        ...(type === 'exchange' ? {
+          desiredSeat: {
+            section: 'Tribune Boulogne',
+            row: '10',
+            number: 50
+          }
+        } : {}),
         description: type === 'exchange' 
           ? 'Je propose un échange de ma place en Tribune Paris contre une place en Tribune Boulogne. Ma place offre une vue excellente sur le terrain.'
           : 'Je donne ma place car je ne peux plus assister au match. Premier arrivé, premier servi !',
         category: type,
-        userId: user.id,
-        userName: user.displayName || 'Utilisateur Test',
-        userRating: 4.5,
-        status: 'active',
         images: [],
-        preferences: {
-          exchangeType: 'any',
-          proximity: 'any'
-        },
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // Expire dans 30 jours
+        preferences: [],
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
       };
 
       const ticketId = await TicketService.createTicket(testTicketData);
@@ -93,7 +88,7 @@ const AddTicketTestScreen = () => {
       let created = 0;
       for (const match of matches) {
         for (const type of ['exchange', 'giveaway'] as const) {
-          const ticketData: Omit<Ticket, 'id' | 'createdAt' | 'updatedAt'> = {
+          const ticketData: CreateTicketData = {
             title: `${match.home} vs ${match.away}`,
             match: {
               homeTeam: match.home,
@@ -105,26 +100,21 @@ const AddTicketTestScreen = () => {
             currentSeat: {
               section: `Section ${Math.floor(Math.random() * 10) + 1}`,
               row: `${Math.floor(Math.random() * 20) + 1}`,
-              number: `${Math.floor(Math.random() * 30) + 1}`
+              number: Math.floor(Math.random() * 30) + 1
             },
-            desiredSeat: type === 'exchange' ? {
-              section: `Section ${Math.floor(Math.random() * 10) + 1}`,
-              row: `${Math.floor(Math.random() * 20) + 1}`,
-              number: `${Math.floor(Math.random() * 30) + 1}`
-            } : undefined,
+            ...(type === 'exchange' ? {
+              desiredSeat: {
+                section: `Section ${Math.floor(Math.random() * 10) + 1}`,
+                row: `${Math.floor(Math.random() * 20) + 1}`,
+                number: Math.floor(Math.random() * 30) + 1
+              }
+            } : {}),
             description: type === 'exchange' 
               ? `Échange pour ${match.home} vs ${match.away}. Excellente place disponible.`
               : `Don de billet pour ${match.home} vs ${match.away}. Ne peux plus y aller.`,
             category: type,
-            userId: user.id,
-            userName: user.displayName || 'Utilisateur Test',
-            userRating: 4.0 + Math.random(),
-            status: 'active',
             images: [],
-            preferences: {
-              exchangeType: 'any',
-              proximity: 'any'
-            },
+            preferences: [],
             expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
           };
 

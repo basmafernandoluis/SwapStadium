@@ -34,6 +34,88 @@ export interface ExchangeRequestResult {
 export class ExchangeService {
 	private static readonly COLLECTION = 'exchangeRequests';
 
+	// --- REAL-TIME SUBSCRIPTIONS (ajoutés) ---
+	// Retourne une fonction d'unsubscribe
+	static subscribeIncoming(callback: (requests: ExchangeRequest[]) => void): () => void {
+		const currentUser = AuthService.getCurrentUser();
+		if (!currentUser) { callback([]); return () => {}; }
+		let baseQuery: firebase.firestore.Query = firestore.collection(this.COLLECTION)
+			.where('toUserId', '==', currentUser.uid);
+		let unsub: (() => void) | null = null;
+		const attachOrdered = () => {
+			try {
+				unsub = baseQuery.orderBy('createdAt', 'desc').onSnapshot({
+					next: (snapshot) => {
+						const reqs = snapshot.docs.map(d => this.mapDoc(d));
+						callback(reqs);
+					},
+					error: (err) => {
+						if (err?.message?.includes('index')) {
+							console.warn('⚠️ ExchangeService.subscribeIncoming - index manquant, fallback sans orderBy');
+							if (unsub) { try { unsub(); } catch {} }
+							unsub = baseQuery.onSnapshot(snap => {
+								const sorted = [...snap.docs].sort((a,b) => {
+									const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+									const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+									return cb - ca;
+								});
+								callback(sorted.map(d => this.mapDoc(d)));
+							});
+						} else {
+							console.error('❌ ExchangeService.subscribeIncoming - erreur snapshot:', err);
+							callback([]);
+						}
+					}
+				});
+			} catch(e) {
+				console.error('❌ ExchangeService.subscribeIncoming - exception attachement:', e);
+				callback([]);
+			}
+		};
+		attachOrdered();
+		return () => { if (unsub) unsub(); };
+	}
+
+	static subscribeOutgoing(callback: (requests: ExchangeRequest[]) => void): () => void {
+		const currentUser = AuthService.getCurrentUser();
+		if (!currentUser) { callback([]); return () => {}; }
+		let baseQuery: firebase.firestore.Query = firestore.collection(this.COLLECTION)
+			.where('fromUserId', '==', currentUser.uid);
+		let unsub: (() => void) | null = null;
+		const attachOrdered = () => {
+			try {
+				unsub = baseQuery.orderBy('createdAt', 'desc').onSnapshot({
+					next: (snapshot) => {
+						const reqs = snapshot.docs.map(d => this.mapDoc(d));
+						callback(reqs);
+					},
+					error: (err) => {
+						if (err?.message?.includes('index')) {
+							console.warn('⚠️ ExchangeService.subscribeOutgoing - index manquant, fallback sans orderBy');
+							if (unsub) { try { unsub(); } catch {} }
+							unsub = baseQuery.onSnapshot(snap => {
+								const sorted = [...snap.docs].sort((a,b) => {
+									const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+									const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+									return cb - ca;
+								});
+								callback(sorted.map(d => this.mapDoc(d)));
+							});
+						} else {
+							console.error('❌ ExchangeService.subscribeOutgoing - erreur snapshot:', err);
+							callback([]);
+						}
+					}
+				});
+			} catch(e) {
+				console.error('❌ ExchangeService.subscribeOutgoing - exception attachement:', e);
+				callback([]);
+			}
+		};
+		attachOrdered();
+		return () => { if (unsub) unsub(); };
+	}
+
 	// Trouver une demande existante entre 2 tickets (dans un état encore actif)
 	static async findOpenRequest(fromTicketId: string, toTicketId: string): Promise<ExchangeRequestResult> {
 		try {
@@ -133,10 +215,29 @@ export class ExchangeService {
 			const currentUser = AuthService.getCurrentUser();
 			if (!currentUser) return { success: false, error: 'Utilisateur non connecté' };
 
-			let snapshot = await firestore.collection(this.COLLECTION)
-				.where('toUserId', '==', currentUser.uid)
-				.orderBy('createdAt', 'desc')
-				.get();
+			let snapshot: firebase.firestore.QuerySnapshot;
+			try {
+				snapshot = await firestore.collection(this.COLLECTION)
+					.where('toUserId', '==', currentUser.uid)
+					.orderBy('createdAt', 'desc')
+					.get();
+			} catch (err: any) {
+				if (err?.message?.includes('index')) {
+					console.warn('⚠️ ExchangeService - Index manquant (toUserId, createdAt desc). Fallback tri local.');
+					snapshot = await firestore.collection(this.COLLECTION)
+						.where('toUserId', '==', currentUser.uid)
+						.get();
+					// tri local desc
+					const sorted = snapshot.docs.sort((a,b) => {
+						const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+						const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+						return cb - ca;
+					});
+					(snapshot as any).docs = sorted;
+				} else {
+					throw err;
+				}
+			}
 			const requests = snapshot.docs.map(d => this.mapDoc(d));
 			return { success: true, requests };
 		} catch (error) {
@@ -149,10 +250,28 @@ export class ExchangeService {
 		try {
 			const currentUser = AuthService.getCurrentUser();
 			if (!currentUser) return { success: false, error: 'Utilisateur non connecté' };
-			const snapshot = await firestore.collection(this.COLLECTION)
-				.where('fromUserId', '==', currentUser.uid)
-				.orderBy('createdAt', 'desc')
-				.get();
+			let snapshot: firebase.firestore.QuerySnapshot;
+			try {
+				snapshot = await firestore.collection(this.COLLECTION)
+					.where('fromUserId', '==', currentUser.uid)
+					.orderBy('createdAt', 'desc')
+					.get();
+			} catch (err: any) {
+				if (err?.message?.includes('index')) {
+					console.warn('⚠️ ExchangeService - Index manquant (fromUserId, createdAt desc). Fallback tri local.');
+					snapshot = await firestore.collection(this.COLLECTION)
+						.where('fromUserId', '==', currentUser.uid)
+						.get();
+					const sorted = snapshot.docs.sort((a,b) => {
+						const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+						const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+						return cb - ca;
+					});
+					(snapshot as any).docs = sorted;
+				} else {
+					throw err;
+				}
+			}
 			const requests = snapshot.docs.map(d => this.mapDoc(d));
 			return { success: true, requests };
 		} catch (error) {
@@ -199,6 +318,44 @@ export class ExchangeService {
 	static async cancel(requestId: string): Promise<ExchangeRequestResult> {
 		return this.updateStatus(requestId, 'cancelled');
 	}
+
+			// Marque l'échange comme terminé et met fin au cycle: met à jour la demande et les deux billets
+			static async complete(requestId: string): Promise<ExchangeRequestResult> {
+				try {
+					const currentUser = AuthService.getCurrentUser();
+					if (!currentUser) return { success: false, error: 'Utilisateur non connecté' };
+
+					const reqRef = firestore.collection(this.COLLECTION).doc(requestId);
+					const result = await firestore.runTransaction(async (tx) => {
+						const snap = await tx.get(reqRef);
+						if (!snap.exists) throw new Error('Demande introuvable');
+						const data: any = snap.data();
+						if (!data) throw new Error('Données manquantes');
+						// Autorisé pour l'une des deux parties
+						if (![data.fromUserId, data.toUserId].includes(currentUser.uid)) {
+							throw new Error('Non autorisé');
+						}
+						const nowTs = firebase.firestore.Timestamp.fromDate(new Date());
+
+						// Mettre la demande en completed
+						tx.update(reqRef, { status: 'completed', updatedAt: nowTs });
+
+						// Mettre les deux billets en completed
+						const fromTicketRef = firestore.collection('tickets').doc(data.fromTicketId);
+						const toTicketRef = firestore.collection('tickets').doc(data.toTicketId);
+
+						tx.update(fromTicketRef, { status: 'completed', updatedAt: nowTs });
+						tx.update(toTicketRef, { status: 'completed', updatedAt: nowTs });
+
+						return { id: snap.id, ...data, status: 'completed', updatedAt: nowTs };
+					});
+
+					return { success: true, request: this.mapRaw(result) };
+				} catch (error) {
+					console.error('❌ ExchangeService - Erreur completion:', error);
+					return { success: false, error: (error as any)?.message || 'Erreur finalisation' };
+				}
+			}
 
 	private static async updateStatus(requestId: string, status: ExchangeRequestStatus): Promise<ExchangeRequestResult> {
 		try {
@@ -287,7 +444,7 @@ export class ExchangeService {
 			fromUserId: data.fromUserId,
 			toUserId: data.toUserId,
 			message: data.message,
-			status: data.status,
+				status: (data.status || 'pending').toLowerCase(),
 			createdAt: data.createdAt.toDate(),
 			updatedAt: data.updatedAt.toDate(),
 			fromContactRequested: data.fromContactRequested || false,
@@ -307,7 +464,7 @@ export class ExchangeService {
 			fromUserId: raw.fromUserId,
 			toUserId: raw.toUserId,
 			message: raw.message,
-			status: raw.status,
+				status: (raw.status || 'pending').toLowerCase(),
 			createdAt: raw.createdAt?.toDate ? raw.createdAt.toDate() : new Date(raw.createdAt),
 			updatedAt: raw.updatedAt?.toDate ? raw.updatedAt.toDate() : new Date(raw.updatedAt),
 		};

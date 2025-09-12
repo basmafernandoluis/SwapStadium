@@ -16,7 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../hooks/useAuth';
 import { useGlobalToast } from '../../contexts/ToastContext';
 import { TicketService } from '../../services/ticketService';
-import { Ticket } from '../../types';
+import type { CreateTicketData } from '../../services/ticketService';
 
 const AddTicketScreen = () => {
   const { t } = useTranslation();
@@ -76,50 +76,40 @@ const AddTicketScreen = () => {
     try {
       setLoading(true);
 
-      // Construire l'objet ticket
-      const baseTicketData = {
+      // Construire l'objet conforme au service
+      const ticketData: CreateTicketData = {
         title: `${formData.homeTeam} vs ${formData.awayTeam}`,
         match: {
           homeTeam: formData.homeTeam.trim(),
           awayTeam: formData.awayTeam.trim(),
           stadium: formData.stadium.trim(),
           date: matchDate,
-          competition: 'Ligue 1' // Valeur par défaut
+          competition: 'Ligue 1'
         },
         currentSeat: {
           section: formData.currentSection.trim(),
           row: formData.currentRow.trim(),
-          number: formData.currentSeat.trim()
+          number: parseInt(formData.currentSeat.trim(), 10)
         },
         description: formData.description.trim(),
         category: formData.category,
-        userId: user.id,
-        userName: user.displayName || 'Utilisateur',
-        userRating: 4.5, // Note par défaut pour nouveaux utilisateurs
-        status: 'active' as const,
-        images: [], // Pour l'instant pas d'images
-        preferences: {
-          exchangeType: 'any' as const,
-          proximity: 'any' as const
-        },
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // Expire dans 30 jours
+        images: [],
+        preferences: [],
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
       };
 
       // Ajouter desiredSeat seulement pour les échanges
-      const ticketData: Omit<Ticket, 'id' | 'createdAt' | 'updatedAt'> = {
-        ...baseTicketData,
-        ...(formData.category === 'exchange' && formData.wantedSection ? {
-          desiredSeat: {
-            section: formData.wantedSection.trim(),
-            row: formData.wantedRow.trim(),
-            number: formData.wantedSeat.trim()
-          }
-        } : {})
-      };
+      if (formData.category === 'exchange' && formData.wantedSection) {
+        (ticketData as any).desiredSeat = {
+          section: formData.wantedSection.trim(),
+          row: formData.wantedRow.trim(),
+          number: parseInt(formData.wantedSeat.trim(), 10)
+        };
+      }
 
       console.log('🎫 Données du billet à créer:', ticketData);
 
-      const ticketId = await TicketService.createTicket(ticketData);
+  const createRes = await TicketService.createTicket(ticketData);
       
   showSuccess(`🎉 Billet publié avec succès !\n\nVotre annonce "${formData.homeTeam} vs ${formData.awayTeam}" est maintenant visible.`);
       

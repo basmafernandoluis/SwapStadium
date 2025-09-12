@@ -23,7 +23,7 @@ export interface Ticket {
   createdAt: Date;
   currentSeat: Seat;
   description: string;
-  desiredSeat: Seat;
+  desiredSeat?: Seat;
   expiresAt: Date;
   images: string[]; // URLs des images
   match: Match;
@@ -40,7 +40,7 @@ export interface CreateTicketData {
   category: string;
   currentSeat: Seat;
   description: string;
-  desiredSeat: Seat;
+  desiredSeat?: Seat;
   expiresAt: Date;
   images?: string[];
   match: Match;
@@ -57,6 +57,148 @@ export interface TicketResult {
 
 export class TicketService {
   private static readonly COLLECTION_NAME = 'tickets';
+
+  // --- REAL-TIME SUBSCRIPTIONS (ajoutés) ---
+  // Pattern: retourne une fonction d'unsubscribe. Le callback reçoit { tickets, fromCache?: boolean }
+  static subscribeMyTickets(callback: (tickets: Ticket[]) => void): () => void {
+    const currentUser = AuthService.getCurrentUser();
+    if (!currentUser) {
+      // Pas d'utilisateur -> callback vide et no-op unsubscribe
+      callback([]);
+      return () => {};
+    }
+
+    const baseQuery = firestore.collection(this.COLLECTION_NAME)
+      .where('userId', '==', currentUser.uid);
+
+    // On tente la version avec orderBy d'abord; si index manquant on fallback
+    let unsub: (() => void) | null = null;
+    const attachOrdered = () => {
+      try {
+        unsub = baseQuery.orderBy('createdAt', 'desc').onSnapshot({
+          next: (snapshot) => {
+            const tickets = snapshot.docs.map(doc => {
+              const data: any = doc.data();
+              if (!data) return null;
+              return {
+                id: doc.id,
+                ...data,
+                createdAt: data.createdAt.toDate(),
+                updatedAt: data.updatedAt.toDate(),
+                expiresAt: data.expiresAt.toDate(),
+                match: { ...data.match, date: data.match.date.toDate() }
+              } as Ticket;
+            }).filter(Boolean) as Ticket[];
+            callback(tickets);
+          },
+          error: (err) => {
+            if (err?.message?.includes('index') || err?.code === 'failed-precondition') {
+              console.warn('⚠️ TicketService.subscribeMyTickets - index manquant, fallback sans orderBy');
+              // Fallback simple + tri local
+              if (unsub) { try { unsub(); } catch {} }
+              unsub = baseQuery.onSnapshot((snap) => {
+                const sortedDocs = [...snap.docs].sort((a,b) => {
+                  const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+                  const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+                  return cb - ca;
+                });
+                const tickets = sortedDocs.map(doc => {
+                  const data: any = doc.data();
+                  if (!data) return null;
+                  return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt.toDate(),
+                    updatedAt: data.updatedAt.toDate(),
+                    expiresAt: data.expiresAt.toDate(),
+                    match: { ...data.match, date: data.match.date.toDate() }
+                  } as Ticket;
+                }).filter(Boolean) as Ticket[];
+                callback(tickets);
+              });
+            } else {
+              console.error('❌ TicketService.subscribeMyTickets - erreur snapshot:', err);
+              callback([]);
+            }
+          }
+        });
+      } catch (e) {
+        console.error('❌ TicketService.subscribeMyTickets - exception attachement:', e);
+        callback([]);
+      }
+    };
+    attachOrdered();
+    return () => { if (unsub) unsub(); };
+  }
+
+  static subscribePublicActiveTickets(options: { stadium?: string; limit?: number } | undefined, callback: (tickets: Ticket[]) => void): () => void {
+    const currentUser = AuthService.getCurrentUser();
+    const userId = currentUser?.uid;
+    let baseQuery: firebase.firestore.Query = firestore.collection(this.COLLECTION_NAME)
+      .where('status', '==', 'active');
+    if (options?.stadium) baseQuery = baseQuery.where('match.stadium', '==', options.stadium);
+
+    let unsub: (() => void) | null = null;
+    const attachOrdered = () => {
+      try {
+        let q = baseQuery.orderBy('createdAt', 'desc');
+        if (options?.limit) q = q.limit(options.limit);
+        unsub = q.onSnapshot({
+          next: (snapshot) => {
+            const tickets = snapshot.docs.map(doc => {
+              const data: any = doc.data();
+              if (!data) return null;
+              if (userId && data.userId === userId) return null; // exclure billets utilisateur
+              return {
+                id: doc.id,
+                ...data,
+                createdAt: data.createdAt.toDate(),
+                updatedAt: data.updatedAt.toDate(),
+                expiresAt: data.expiresAt.toDate(),
+                match: { ...data.match, date: data.match.date.toDate() }
+              } as Ticket;
+            }).filter(Boolean) as Ticket[];
+            callback(tickets);
+          },
+          error: (err) => {
+            if (err?.message?.includes('index') || err?.code === 'failed-precondition') {
+              console.warn('⚠️ TicketService.subscribePublicActiveTickets - index manquant, fallback sans orderBy');
+              if (unsub) { try { unsub(); } catch {} }
+              unsub = baseQuery.onSnapshot((snap) => {
+                const sortedDocs = [...snap.docs].sort((a,b) => {
+                  const ca = (a.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+                  const cb = (b.data().createdAt as firebase.firestore.Timestamp)?.toMillis?.() || 0;
+                  return cb - ca;
+                });
+                const tickets = sortedDocs.map(doc => {
+                  const data: any = doc.data();
+                  if (!data) return null;
+                  if (userId && data.userId === userId) return null;
+                  return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt.toDate(),
+                    updatedAt: data.updatedAt.toDate(),
+                    expiresAt: data.expiresAt.toDate(),
+                    match: { ...data.match, date: data.match.date.toDate() }
+                  } as Ticket;
+                }).filter(Boolean) as Ticket[];
+                callback(tickets);
+              });
+            } else {
+              console.error('❌ TicketService.subscribePublicActiveTickets - erreur snapshot:', err);
+              callback([]);
+            }
+          }
+        });
+      } catch (e) {
+        console.error('❌ TicketService.subscribePublicActiveTickets - exception attachement:', e);
+        callback([]);
+      }
+    };
+    attachOrdered();
+    return () => { if (unsub) unsub(); };
+  }
 
   static async createTicket(ticketData: CreateTicketData): Promise<TicketResult> {
     try {
@@ -406,8 +548,11 @@ export class TicketService {
       errors.push('Les informations du siège actuel sont incomplètes');
     }
 
-    if (!data.desiredSeat?.number || !data.desiredSeat?.row || !data.desiredSeat?.section) {
-      errors.push('Les informations du siège désiré sont incomplètes');
+    // Pour les échanges, desiredSeat est requis; pour les dons, il peut être omis
+    if (data.category === 'exchange') {
+      if (!data.desiredSeat?.number || !data.desiredSeat?.row || !data.desiredSeat?.section) {
+        errors.push('Les informations du siège désiré sont incomplètes');
+      }
     }
 
     return {
