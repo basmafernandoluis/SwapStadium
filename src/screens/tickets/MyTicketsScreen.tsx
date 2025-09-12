@@ -52,17 +52,20 @@ const MyTicketsScreen = () => {
   };
 
   const getStatusColor = (status: string) => {
-    if (status === 'active') return '#4CAF50';
-    if (status === 'exchanged') return '#2196F3';
-    if (status === 'expired') return '#9E9E9E';
+    const s = (status || '').toLowerCase();
+    if (s === 'active') return '#4CAF50';
+    if (s === 'completed' || s === 'exchanged') return '#2196F3';
+    if (s === 'expired' || s === 'cancelled') return '#9E9E9E';
     return '#9E9E9E';
   };
 
   const getStatusText = (status: string) => {
-    if (status === 'active') return 'Actif';
-    if (status === 'exchanged') return 'Échangé';
-    if (status === 'expired') return 'Expiré';
-    return 'Suspendu';
+    const s = (status || '').toLowerCase();
+    if (s === 'active') return 'Actif';
+    if (s === 'completed' || s === 'exchanged') return 'Échangé';
+    if (s === 'expired') return 'Expiré';
+    if (s === 'cancelled') return 'Annulé';
+    return s ? s : '—';
   };
 
   const renderTicketCard = ({ item: ticket }: { item: ServiceTicket }) => (

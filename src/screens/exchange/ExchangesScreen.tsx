@@ -85,7 +85,7 @@ const ExchangesScreen: React.FC = () => {
         <Text style={styles.date}>{new Date(item.createdAt).toLocaleDateString('fr-FR')}</Text>
         {myUid && (item.status === 'pending' || item.status === 'accepted') && (
           <View style={styles.actionsRow}>
-            {isIncoming && (
+            {isIncoming && item.status === 'pending' && (
               <>
                 <TouchableOpacity style={[styles.smallBtn, {backgroundColor:'#4CAF50'}]} onPress={()=>actOn('accept', item.id!)}>
                   <Text style={styles.smallBtnText}>Accepter</Text>
@@ -95,7 +95,7 @@ const ExchangesScreen: React.FC = () => {
                 </TouchableOpacity>
               </>
             )}
-            {isOutgoing && (
+            {isOutgoing && item.status === 'pending' && (
               <TouchableOpacity style={[styles.smallBtn, {backgroundColor:'#9E9E9E'}]} onPress={()=>actOn('cancel', item.id!)}>
                 <Text style={styles.smallBtnText}>Annuler</Text>
               </TouchableOpacity>

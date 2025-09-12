@@ -293,15 +293,9 @@ export class ExchangeService {
 				if (data.toUserId !== currentUser.uid) throw new Error('Non autorisé');
 				if (data.status !== 'pending') throw new Error('Statut invalide');
 
-				// Mettre les tickets à jour (statut completed)
-				const fromTicketRef = firestore.collection('tickets').doc(data.fromTicketId);
-				const toTicketRef = firestore.collection('tickets').doc(data.toTicketId);
-
-				tx.update(fromTicketRef, { status: 'completed', updatedAt: firebase.firestore.Timestamp.fromDate(new Date()) });
-				tx.update(toTicketRef, { status: 'completed', updatedAt: firebase.firestore.Timestamp.fromDate(new Date()) });
-
-				tx.update(reqRef, { status: 'completed', updatedAt: firebase.firestore.Timestamp.fromDate(new Date()) });
-				return { id: reqSnap.id, ...data, status: 'completed' };
+				// Étape acceptation: seule la demande passe en 'accepted'. Les billets seront mis à jour lors de 'complete()'.
+				tx.update(reqRef, { status: 'accepted', updatedAt: firebase.firestore.Timestamp.fromDate(new Date()) });
+				return { id: reqSnap.id, ...data, status: 'accepted' };
 			});
 
 			return { success: true, request: this.mapRaw(result) };
